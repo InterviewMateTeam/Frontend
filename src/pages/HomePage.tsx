@@ -16,7 +16,11 @@ import checkWhite from "../assets/check.svg";
 
 type ScenarioType = "basic" | "common" | "deep";
 
-const HomePage = () => {
+type HomePageProps = {
+  onStartBasicInterview: () => void;
+};
+
+const HomePage = ({ onStartBasicInterview }: HomePageProps) => {
   const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(
     null
   );
@@ -42,11 +46,12 @@ const HomePage = () => {
   const handleStartInterview = () => {
     if (!canStartInterview) return;
 
-    console.log("선택된 면접 유형:", selectedScenario);
-    console.log("입력 정보:", customInfo);
+    if (selectedScenario === "basic") {
+      onStartBasicInterview();
+      return;
+    }
 
-    // 다음 페이지 만들면 여기에서 이동 처리하면 돼.
-    // 예: navigate("/interview");
+    alert("아직 준비 중인 면접 유형입니다.");
   };
 
   return (

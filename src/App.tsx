@@ -1,7 +1,48 @@
+import { useState } from "react";
 import HomePage from "./pages/HomePage";
+import BasicInterviewPage from "./pages/BasicInterviewPage";
+
+type Page = "home" | "loading" | "basicInterview";
 
 function App() {
-  return <HomePage />;
+  const [page, setPage] = useState<Page>("home");
+
+  const handleStartBasicInterview = () => {
+    setPage("loading");
+
+    setTimeout(() => {
+      setPage("basicInterview");
+    }, 1200);
+  };
+
+  if (page === "loading") {
+    return <LoadingPage />;
+  }
+
+  if (page === "basicInterview") {
+    return <BasicInterviewPage />;
+  }
+
+  return <HomePage onStartBasicInterview={handleStartBasicInterview} />;
 }
 
+const LoadingPage = () => {
+  return (
+    <div className="relative w-screen min-h-screen bg-[#FFF9F3] overflow-hidden flex items-center justify-center">
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="flex items-center gap-[10px] h-[84px]">
+          <span className="loading-bar" style={{ animationDelay: "0s" }} />
+          <span className="loading-bar" style={{ animationDelay: "0.12s" }} />
+          <span className="loading-bar" style={{ animationDelay: "0.24s" }} />
+          <span className="loading-bar" style={{ animationDelay: "0.36s" }} />
+          <span className="loading-bar" style={{ animationDelay: "0.48s" }} />
+        </div>
+
+        <p className="mt-[26px] text-[42px] font-bold text-[#FFE2C6]">
+          다음 단계로 넘어갑니다
+        </p>
+      </div>
+    </div>
+  );
+};
 export default App;
