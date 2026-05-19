@@ -1,11 +1,21 @@
 import { useState } from "react";
 import HomePage from "./pages/HomePage";
 import BasicInterviewPage from "./pages/BasicInterviewPage";
+import FeedbackPage from "./pages/FeedbackPage";
 
-type Page = "home" | "loading" | "basicInterview";
+type Page = "home" | "loading" | "basicInterview" | "feedback";
+
+export type InterviewRecord = {
+  stepTitle: string;
+  aiQuestion: string;
+  userAnswer: string;
+};
 
 function App() {
   const [page, setPage] = useState<Page>("home");
+  const [interviewRecords, setInterviewRecords] = useState<InterviewRecord[]>(
+    []
+  );
 
   const handleStartBasicInterview = () => {
     setPage("loading");
@@ -15,12 +25,31 @@ function App() {
     }, 1200);
   };
 
+  const handleFinishInterview = (records: InterviewRecord[]) => {
+    setInterviewRecords(records);
+    setPage("loading");
+
+    setTimeout(() => {
+      setPage("feedback");
+    }, 1300);
+  };
+
   if (page === "loading") {
     return <LoadingPage />;
   }
 
   if (page === "basicInterview") {
-    return <BasicInterviewPage />;
+    return <BasicInterviewPage onFinishInterview={handleFinishInterview} />;
+  }
+
+  if (page === "feedback") {
+    return (
+      <FeedbackPage
+        records={interviewRecords}
+        onGoHome={() => setPage("home")}
+        onRetry={() => setPage("basicInterview")}
+      />
+    );
   }
 
   return <HomePage onStartBasicInterview={handleStartBasicInterview} />;
@@ -39,10 +68,11 @@ const LoadingPage = () => {
         </div>
 
         <p className="mt-[26px] text-[42px] font-bold text-[#FFE2C6]">
-          다음 단계로 넘어갑니다
+          피드백 단계로 넘어갑니다
         </p>
       </div>
     </div>
   );
 };
+
 export default App;

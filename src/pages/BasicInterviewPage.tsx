@@ -5,6 +5,11 @@ import micWhite from "../assets/mic-white.svg";
 import stepCheckWhite from "../assets/check.svg";
 import chatOrange from "../assets/chat-orange.svg";
 import refreshBrown from "../assets/refresh-brown.svg";
+import type { InterviewRecord } from "../App";
+
+type BasicInterviewPageProps = {
+  onFinishInterview: (records: InterviewRecord[]) => void;
+};
 
 type InterviewStep = 0 | 1 | 2;
 type LoadingType = "next" | "feedback" | null;
@@ -46,27 +51,29 @@ const steps = [
     title: "자기소개",
     subtitle: "현재 진행",
     progressTitle: "자기소개",
+    question: "안녕하세요. 먼저 1분 자기소개를 해주세요.",
   },
   {
     title: "후속 질문",
     subtitle: "다음 제공",
     progressTitle: "후속 질문",
+    question: "좋습니다. 자기소개 내용을 바탕으로 후속 질문에 답변해 주세요.",
   },
   {
     title: "기타 인터뷰 질문",
     subtitle: "-",
     progressTitle: "기타 인터뷰 질문",
+    question: "마지막으로 기타 인터뷰 질문에 답변해 주세요.",
   },
 ];
 
-const BasicInterviewPage = () => {
+const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
   const [currentStep, setCurrentStep] = useState<InterviewStep>(0);
   const [isListening, setIsListening] = useState(false);
   const [myAnswer, setMyAnswer] = useState("");
-  const [aiText, setAiText] = useState(
-    "안녕하세요. 먼저 1분 자기소개를 해주세요."
-  );
+  const [aiText, setAiText] = useState(steps[0].question);
   const [loadingType, setLoadingType] = useState<LoadingType>(null);
+  const [records, setRecords] = useState<InterviewRecord[]>([]);
 
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const finalTextRef = useRef("");
@@ -74,8 +81,32 @@ const BasicInterviewPage = () => {
 
   const currentTitle = steps[currentStep].progressTitle;
 
+  const getCurrentAnswer = () => {
+    return latestAnswerRef.current.trim() || myAnswer.trim();
+  };
+
+  const createCurrentRecord = (): InterviewRecord | null => {
+    const answer = getCurrentAnswer();
+
+    if (!answer) {
+      return null;
+    }
+
+    return {
+      stepTitle: steps[currentStep].title,
+      aiQuestion: aiText,
+      userAnswer: answer,
+    };
+  };
+
   const moveToNextStepWithLoading = () => {
     if (currentStep >= 2) return;
+
+    const currentRecord = createCurrentRecord();
+
+    if (currentRecord) {
+      setRecords((prev) => [...prev, currentRecord]);
+    }
 
     setLoadingType("next");
 
@@ -83,17 +114,11 @@ const BasicInterviewPage = () => {
       const nextStep = (currentStep + 1) as InterviewStep;
 
       setCurrentStep(nextStep);
+      setAiText(steps[nextStep].question);
       setMyAnswer("");
+
       finalTextRef.current = "";
       latestAnswerRef.current = "";
-
-      if (nextStep === 1) {
-        setAiText("좋습니다. 자기소개 내용을 바탕으로 후속 질문에 답변해 주세요.");
-      }
-
-      if (nextStep === 2) {
-        setAiText("마지막으로 기타 인터뷰 질문에 답변해 주세요.");
-      }
 
       setLoadingType(null);
     }, 1200);
@@ -111,7 +136,9 @@ const BasicInterviewPage = () => {
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert("이 브라우저에서는 음성 인식이 지원되지 않아요. Chrome에서 테스트해줘.");
+      alert(
+        "이 브라우저에서는 음성 인식이 지원되지 않아요. Chrome이나 Edge에서 테스트해줘."
+      );
       return;
     }
 
@@ -154,12 +181,16 @@ const BasicInterviewPage = () => {
       setIsListening(false);
 
       if (event.error === "no-speech") {
-        alert("음성이 잘 감지되지 않았어. 마이크를 다시 누르고 조금 더 또렷하게 말해줘.");
+        alert(
+          "음성이 잘 감지되지 않았어. 마이크를 다시 누르고 조금 더 또렷하게 말해줘."
+        );
         return;
       }
 
       if (event.error === "not-allowed") {
-        alert("마이크 권한이 차단되어 있어. 브라우저 주소창 왼쪽에서 마이크 권한을 허용해줘.");
+        alert(
+          "마이크 권한이 차단되어 있어. 브라우저 주소창 왼쪽에서 마이크 권한을 허용해줘."
+        );
         return;
       }
 
@@ -169,7 +200,7 @@ const BasicInterviewPage = () => {
     recognition.onend = () => {
       setIsListening(false);
 
-      const hasAnswer = latestAnswerRef.current.trim().length > 0;
+      const hasAnswer = getCurrentAnswer().length > 0;
 
       if (!hasAnswer) {
         return;
@@ -189,12 +220,17 @@ const BasicInterviewPage = () => {
       recognitionRef.current?.stop();
     }
 
+    const currentRecord = createCurrentRecord();
+
+    const finalRecords = currentRecord
+      ? [...records, currentRecord]
+      : records;
+
     setLoadingType("feedback");
 
     setTimeout(() => {
-      setLoadingType(null);
-      //navigate("/feedback");
-    }, 1400);
+      onFinishInterview(finalRecords);
+    }, 1300);
   };
 
   if (loadingType) {
@@ -240,12 +276,12 @@ const BasicInterviewPage = () => {
 
           <div
             className={`
-              mt-[22px] px-[22px] h-[34px] rounded-full
+              mt-[22px] px-[22px] h-[36px] rounded-full
               flex items-center justify-center border shadow-sm
               ${
                 isListening
-                  ? "bg-[#FFF0E2] border-[#FF9029]/50"
-                  : "bg-white/75 border-[#E4CDB8]"
+                  ? "bg-[#FFF0E2] border-[#FF9029]/60"
+                  : "bg-white/85 border-[#E4CDB8]"
               }
             `}
           >
@@ -287,13 +323,15 @@ const BasicInterviewPage = () => {
             </button>
 
             <p className="mt-[20px] text-[18px] font-bold text-[#734112]">
-              {isListening ? "다 말했으면 마이크를 한 번 더 눌러 종료" : "답하여 말하기"}
+              {isListening
+                ? "다 말했으면 마이크를 한 번 더 눌러 종료"
+                : "답하여 말하기"}
             </p>
 
             <p className="mt-[6px] text-[12px] font-semibold text-[#8B6F58]">
               {isListening
                 ? "종료 후 자동으로 다음 단계 로딩 화면이 표시됩니다."
-                : "Chrome에서 테스트하고, 브라우저 마이크 권한을 허용해야 합니다."}
+                : "Chrome/Edge에서 테스트하고, 브라우저 마이크 권한을 허용해야 합니다."}
             </p>
           </section>
 
@@ -332,19 +370,14 @@ const InterviewLoadingPage = ({ type }: InterviewLoadingPageProps) => {
 
   return (
     <div className="relative w-screen min-h-screen bg-[#FFF9F3] overflow-hidden flex items-center justify-center">
-      {isFeedback ? (
+      {isFeedback && (
         <div className="absolute inset-0 bg-[#9B9188]/45 backdrop-blur-[3px]" />
-      ) : null}
+      )}
 
       <div className="relative z-10 flex flex-col items-center">
         <LoadingBars />
 
-        <p
-          className={`
-            mt-[26px] text-[42px] font-bold
-            ${isFeedback ? "text-[#FFE2C6]" : "text-[#FFE2C6]"}
-          `}
-        >
+        <p className="mt-[26px] text-[42px] font-bold text-[#FFE2C6]">
           {isFeedback ? "피드백 단계로 넘어갑니다" : "다음 단계로 넘어갑니다"}
         </p>
       </div>
