@@ -14,16 +14,19 @@ import calendarWhite from "../assets/calendar-white.svg";
 
 import checkWhite from "../assets/check.svg";
 
-type ScenarioType = "basic" | "common" | "deep";
+type ScenarioType = "oneMinuteIntro" | "common" | "deep";
 
 type HomePageProps = {
-  onStartBasicInterview: () => void;
+  onStartCommonInterview: () => void;
+  onStartOneMinuteIntro: () => void;
 };
 
-const HomePage = ({ onStartBasicInterview }: HomePageProps) => {
-  const [selectedScenario, setSelectedScenario] = useState<ScenarioType | null>(
-    null
-  );
+const HomePage = ({
+  onStartCommonInterview,
+  onStartOneMinuteIntro,
+}: HomePageProps) => {
+  const [selectedScenario, setSelectedScenario] =
+    useState<ScenarioType | null>(null);
 
   const [customInfo, setCustomInfo] = useState("");
   const [isInfoConfirmed, setIsInfoConfirmed] = useState(false);
@@ -46,8 +49,13 @@ const HomePage = ({ onStartBasicInterview }: HomePageProps) => {
   const handleStartInterview = () => {
     if (!canStartInterview) return;
 
-    if (selectedScenario === "basic") {
-      onStartBasicInterview();
+    if (selectedScenario === "oneMinuteIntro") {
+      onStartOneMinuteIntro();
+      return;
+    }
+
+    if (selectedScenario === "common") {
+      onStartCommonInterview();
       return;
     }
 
@@ -59,10 +67,17 @@ const HomePage = ({ onStartBasicInterview }: HomePageProps) => {
       {/* Header */}
       <header className="w-full h-[57px] bg-[#FFF9F3] border-b border-[#EAD8C8] flex items-center justify-center">
         <nav className="flex items-center gap-[170px] text-[#3F2A1A] text-[17px] font-bold">
-          <button className="bg-transparent border-none outline-none cursor-pointer">
+          <button
+            type="button"
+            className="bg-transparent border-none outline-none cursor-pointer"
+          >
             Main
           </button>
-          <button className="bg-transparent border-none outline-none cursor-pointer">
+
+          <button
+            type="button"
+            className="bg-transparent border-none outline-none cursor-pointer"
+          >
             Policy
           </button>
         </nav>
@@ -91,8 +106,8 @@ const HomePage = ({ onStartBasicInterview }: HomePageProps) => {
         {/* Cards */}
         <section className="relative z-10 mt-[28px] flex justify-center gap-[70px] w-full px-[70px] flex-wrap">
           <InterviewCard
-            isSelected={selectedScenario === "basic"}
-            onClick={() => setSelectedScenario("basic")}
+            isSelected={selectedScenario === "oneMinuteIntro"}
+            onClick={() => setSelectedScenario("oneMinuteIntro")}
             defaultIcon={micBrown}
             activeIcon={micWhite}
             title="기초 - 1분 자기소개 연습"
