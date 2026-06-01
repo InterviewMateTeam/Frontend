@@ -1,85 +1,128 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import mainBg from "../assets/main-bg.svg";
 import micWhite from "../assets/mic-white.svg";
 import stepCheckWhite from "../assets/check.svg";
 import chatOrange from "../assets/chat-orange.svg";
 import refreshBrown from "../assets/refresh-brown.svg";
+
+import { postSttAudio } from "../apis/stt";
+import { submitAnswer } from "../apis/answer";
+import { generateQuestion, type InterviewStage } from "../apis/question";
+
 import type { InterviewRecord } from "../App";
 
 type BasicInterviewPageProps = {
+  sessionId: number | null;
   onFinishInterview: (records: InterviewRecord[]) => void;
 };
 
 type InterviewStep = 0 | 1 | 2;
 type LoadingType = "next" | "feedback" | null;
 
-type SpeechRecognitionType = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start: () => void;
-  stop: () => void;
-  onstart: (() => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-};
-
-type SpeechRecognitionEventLike = {
-  resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: {
-      isFinal: boolean;
-      [index: number]: {
-        transcript: string;
-      };
-    };
-  };
-};
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognitionType;
-    webkitSpeechRecognition?: new () => SpeechRecognitionType;
-  }
-}
-
-const steps = [
+const steps: {
+  title: string;
+  subtitle: string;
+  progressTitle: string;
+  stage: InterviewStage;
+  fallbackQuestion: string;
+}[] = [
   {
     title: "자기소개",
     subtitle: "현재 진행",
     progressTitle: "자기소개",
-    question: "안녕하세요. 먼저 1분 자기소개를 해주세요.",
+    stage: "INTRODUCTION",
+    fallbackQuestion: "안녕하세요. 먼저 자기소개를 해주세요.",
   },
   {
     title: "후속 질문",
     subtitle: "다음 제공",
     progressTitle: "후속 질문",
-    question: "좋습니다. 자기소개 내용을 바탕으로 후속 질문에 답변해 주세요.",
+    stage: "PERSONALITY",
+    fallbackQuestion:
+      "좋습니다. 자기소개 내용을 바탕으로 후속 질문에 답변해 주세요.",
   },
   {
     title: "기타 인터뷰 질문",
     subtitle: "-",
     progressTitle: "기타 인터뷰 질문",
-    question: "마지막으로 기타 인터뷰 질문에 답변해 주세요.",
+    stage: "TECHNICAL",
+    fallbackQuestion: "마지막으로 직무 관련 질문에 답변해 주세요.",
   },
 ];
 
-const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
+const BasicInterviewPage = ({
+  sessionId,
+  onFinishInterview,
+}: BasicInterviewPageProps) => {
   const [currentStep, setCurrentStep] = useState<InterviewStep>(0);
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isQuestionLoading, setIsQuestionLoading] = useState(false);
+
   const [myAnswer, setMyAnswer] = useState("");
-  const [aiText, setAiText] = useState(steps[0].question);
+  const [aiText, setAiText] = useState(steps[0].fallbackQuestion);
+  const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(
+    null
+  );
+
   const [loadingType, setLoadingType] = useState<LoadingType>(null);
   const [records, setRecords] = useState<InterviewRecord[]>([]);
 
-  const recognitionRef = useRef<SpeechRecognitionType | null>(null);
-  const finalTextRef = useRef("");
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(
+    null
+  );
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
   const latestAnswerRef = useRef("");
 
   const currentTitle = steps[currentStep].progressTitle;
+
+  useEffect(() => {
+    requestQuestion(0);
+  }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const requestQuestion = async (
+    step: InterviewStep,
+    previousAnswer = ""
+  ) => {
+    if (!sessionId) {
+      setAiText(steps[step].fallbackQuestion);
+      setCurrentQuestionId(null);
+      return;
+    }
+
+    try {
+      setIsQuestionLoading(true);
+
+      const result = await generateQuestion({
+        sessionId,
+        mode: "BASIC",
+        stage: steps[step].stage,
+        previousAnswer,
+        questionOrder: step + 1,
+      });
+
+      setAiText(result.questionText);
+      setCurrentQuestionId(result.questionId);
+
+      console.log("질문 생성 완료:", result);
+    } catch (error) {
+      console.error(error);
+      setAiText(steps[step].fallbackQuestion);
+      setCurrentQuestionId(null);
+    } finally {
+      setIsQuestionLoading(false);
+    }
+  };
 
   const getCurrentAnswer = () => {
     return latestAnswerRef.current.trim() || myAnswer.trim();
@@ -99,6 +142,25 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
     };
   };
 
+  const submitCurrentAnswer = async (answerText: string) => {
+    const answerDuration = recordingStartedAt
+      ? Math.max(1, Math.round((Date.now() - recordingStartedAt) / 1000))
+      : 0;
+
+    if (!currentQuestionId) {
+      console.warn("currentQuestionId가 없어 답변 제출을 건너뜀");
+      return;
+    }
+
+    const result = await submitAnswer({
+      questionId: currentQuestionId,
+      answerText,
+      answerDuration,
+    });
+
+    console.log("답변 제출 완료:", result);
+  };
+
   const moveToNextStepWithLoading = () => {
     if (currentStep >= 2) return;
 
@@ -110,114 +172,133 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
 
     setLoadingType("next");
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const nextStep = (currentStep + 1) as InterviewStep;
 
       setCurrentStep(nextStep);
-      setAiText(steps[nextStep].question);
       setMyAnswer("");
-
-      finalTextRef.current = "";
       latestAnswerRef.current = "";
+      setCurrentQuestionId(null);
+      setRecordingStartedAt(null);
+
+      await requestQuestion(nextStep, currentRecord?.userAnswer ?? "");
 
       setLoadingType(null);
     }, 1200);
   };
 
-  const handleMicClick = () => {
-    if (loadingType) return;
+  const handleStartRecording = async () => {
+    if (loadingType || isSubmitting || isQuestionLoading) return;
 
-    if (isListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
 
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+      streamRef.current = stream;
 
-    if (!SpeechRecognition) {
-      alert(
-        "이 브라우저에서는 음성 인식이 지원되지 않아요. Chrome이나 Edge에서 테스트해줘."
-      );
-      return;
-    }
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
 
-    const recognition = new SpeechRecognition();
-
-    recognition.lang = "ko-KR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      finalTextRef.current = "";
-      latestAnswerRef.current = "";
-      setMyAnswer("");
-    };
-
-    recognition.onresult = (event) => {
-      let interimText = "";
-      let finalText = finalTextRef.current;
-
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const transcript = event.results[i][0].transcript;
-
-        if (event.results[i].isFinal) {
-          finalText += `${transcript} `;
-        } else {
-          interimText += transcript;
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
         }
-      }
+      };
 
-      const nextAnswer = `${finalText}${interimText}`;
+      mediaRecorder.onstart = () => {
+        setIsRecording(true);
+        setMyAnswer("");
+        latestAnswerRef.current = "";
+        setRecordingStartedAt(Date.now());
+      };
 
-      finalTextRef.current = finalText;
-      latestAnswerRef.current = nextAnswer;
-      setMyAnswer(nextAnswer);
-    };
+      mediaRecorder.onstop = async () => {
+        setIsRecording(false);
 
-    recognition.onerror = (event) => {
-      console.log("Speech recognition error:", event.error);
-      setIsListening(false);
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
 
-      if (event.error === "no-speech") {
-        alert(
-          "음성이 잘 감지되지 않았어. 마이크를 다시 누르고 조금 더 또렷하게 말해줘."
-        );
-        return;
-      }
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
 
-      if (event.error === "not-allowed") {
-        alert(
-          "마이크 권한이 차단되어 있어. 브라우저 주소창 왼쪽에서 마이크 권한을 허용해줘."
-        );
-        return;
-      }
+        if (audioBlob.size === 0) {
+          alert("녹음된 음성이 없습니다. 다시 시도해주세요.");
+          return;
+        }
 
-      alert("음성 인식 중 오류가 발생했어. 마이크 권한과 브라우저를 확인해줘.");
-    };
+        try {
+          setIsSubmitting(true);
 
-    recognition.onend = () => {
-      setIsListening(false);
+          const text = await postSttAudio(audioBlob);
+          const trimmedText = text.trim();
 
-      const hasAnswer = getCurrentAnswer().length > 0;
+          if (!trimmedText) {
+            alert("음성이 잘 인식되지 않았어요. 다시 말해보세요.");
+            return;
+          }
 
-      if (!hasAnswer) {
-        return;
-      }
+          setMyAnswer(trimmedText);
+          latestAnswerRef.current = trimmedText;
 
-      if (currentStep < 2) {
-        moveToNextStepWithLoading();
-      }
-    };
+          await submitCurrentAnswer(trimmedText);
 
-    recognitionRef.current = recognition;
-    recognition.start();
+          if (currentStep < 2) {
+            setTimeout(() => {
+              moveToNextStepWithLoading();
+            }, 500);
+          }
+        } catch (error) {
+          console.error(error);
+          alert("음성 변환 또는 답변 제출 중 오류가 발생했어요.");
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+
+      mediaRecorder.start();
+    } catch (error) {
+      console.error(error);
+      alert("마이크 권한을 허용해주세요.");
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const handleMicClick = async () => {
+    if (loadingType || isSubmitting || isQuestionLoading) return;
+
+    if (isRecording) {
+      handleStopRecording();
+      return;
+    }
+
+    await handleStartRecording();
   };
 
   const handleFinishInterview = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
+    if (isRecording) {
+      alert("먼저 마이크를 다시 눌러 녹음을 종료해주세요.");
+      return;
+    }
+
+    if (isSubmitting) {
+      alert("음성을 텍스트로 변환하고 답변을 제출 중입니다. 잠시만 기다려주세요.");
+      return;
+    }
+
+    if (isQuestionLoading) {
+      alert("질문을 생성 중입니다. 잠시만 기다려주세요.");
+      return;
     }
 
     const currentRecord = createCurrentRecord();
@@ -250,6 +331,7 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
           <section className="text-center">
             <div className="flex items-center justify-center gap-[8px]">
               <span className="w-[12px] h-[12px] rounded-full bg-[#FF9029]" />
+
               <h1 className="text-[30px] font-bold text-[#734112]">
                 {currentTitle} <span className="text-[#FF9029]">진행 중</span>
               </h1>
@@ -279,8 +361,10 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
               mt-[22px] px-[22px] h-[36px] rounded-full
               flex items-center justify-center border shadow-sm
               ${
-                isListening
+                isRecording
                   ? "bg-[#FFF0E2] border-[#FF9029]/60"
+                  : isSubmitting || isQuestionLoading
+                  ? "bg-[#EEF3EA] border-[#C8D5C1]"
                   : "bg-white/85 border-[#E4CDB8]"
               }
             `}
@@ -288,18 +372,35 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
             <span
               className={`
                 w-[9px] h-[9px] rounded-full mr-[8px]
-                ${isListening ? "bg-[#FF9029] animate-pulse" : "bg-[#C89568]"}
+                ${
+                  isRecording
+                    ? "bg-[#FF9029] animate-pulse"
+                    : isSubmitting || isQuestionLoading
+                    ? "bg-[#95AA8D] animate-pulse"
+                    : "bg-[#C89568]"
+                }
               `}
             />
+
             <p
               className={`
                 text-[13px] font-bold
-                ${isListening ? "text-[#FF9029]" : "text-[#734112]"}
+                ${
+                  isRecording
+                    ? "text-[#FF9029]"
+                    : isSubmitting || isQuestionLoading
+                    ? "text-[#738267]"
+                    : "text-[#734112]"
+                }
               `}
             >
-              {isListening
-                ? "음성 인식 중 · 말을 마쳤다면 마이크를 한 번 더 눌러 종료하세요"
-                : "면접 진행 중 · 마이크를 누르면 음성 인식이 시작됩니다"}
+              {isQuestionLoading
+                ? "AI 질문을 생성 중입니다"
+                : isSubmitting
+                ? "음성을 텍스트로 변환하고 답변을 제출 중입니다"
+                : isRecording
+                ? "녹음 중 · 말을 마쳤다면 마이크를 한 번 더 눌러 종료하세요"
+                : "면접 진행 중 · 마이크를 누르면 녹음이 시작됩니다"}
             </p>
           </div>
 
@@ -307,12 +408,19 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
             <button
               type="button"
               onClick={handleMicClick}
+              disabled={isSubmitting || isQuestionLoading}
               className={`
                 relative w-[112px] h-[112px] rounded-full bg-[#FF9029]
                 flex items-center justify-center
                 shadow-[0_0_0_12px_rgba(255,144,41,0.18),0_0_0_24px_rgba(255,144,41,0.08)]
                 transition active:scale-95
-                ${isListening ? "scale-105 animate-pulse" : "hover:scale-105"}
+                ${
+                  isSubmitting || isQuestionLoading
+                    ? "opacity-70 cursor-default"
+                    : isRecording
+                    ? "scale-105 animate-pulse cursor-pointer"
+                    : "hover:scale-105 cursor-pointer"
+                }
               `}
             >
               <img
@@ -323,15 +431,23 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
             </button>
 
             <p className="mt-[20px] text-[18px] font-bold text-[#734112]">
-              {isListening
+              {isQuestionLoading
+                ? "질문 생성 중"
+                : isSubmitting
+                ? "변환 및 제출 중"
+                : isRecording
                 ? "다 말했으면 마이크를 한 번 더 눌러 종료"
                 : "답하여 말하기"}
             </p>
 
             <p className="mt-[6px] text-[12px] font-semibold text-[#8B6F58]">
-              {isListening
+              {isQuestionLoading
+                ? "AI가 다음 면접 질문을 준비하고 있어요."
+                : isSubmitting
+                ? "녹음된 음성을 텍스트로 변환하고 답변을 저장하고 있어요."
+                : isRecording
                 ? "종료 후 자동으로 다음 단계 로딩 화면이 표시됩니다."
-                : "Chrome/Edge에서 테스트하고, 브라우저 마이크 권한을 허용해야 합니다."}
+                : "마이크를 누르면 녹음이 시작됩니다."}
             </p>
           </section>
 
@@ -340,8 +456,11 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
               icon={chatOrange}
               refreshIcon={refreshBrown}
               title="AI 인터뷰어"
-              buttonText="질문 다시 듣기"
-              text={aiText}
+              buttonText="질문 다시 생성"
+              text={isQuestionLoading ? "질문을 생성하고 있습니다." : aiText}
+              onButtonClick={() =>
+                requestQuestion(currentStep, getCurrentAnswer())
+              }
             />
 
             <AnswerBox
@@ -350,7 +469,9 @@ const BasicInterviewPage = ({ onFinishInterview }: BasicInterviewPageProps) => {
               buttonText="면접 끝내기"
               text={
                 myAnswer ||
-                "마이크를 누르고 답변하면 여기에 텍스트로 표시됩니다."
+                (isSubmitting
+                  ? "음성을 텍스트로 변환하고 답변을 제출하고 있습니다."
+                  : "마이크를 누르고 답변하면 여기에 텍스트로 표시됩니다.")
               }
               onButtonClick={handleFinishInterview}
             />
@@ -436,6 +557,7 @@ const StepBlock = ({
 
         <div>
           <p className="text-[15px] font-bold text-[#734112]">{title}</p>
+
           <p
             className={`mt-[4px] text-[10px] font-semibold ${
               isDone || isCurrent ? "text-[#FF9029]" : "text-[#9B7A60]"

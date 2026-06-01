@@ -1,24 +1,19 @@
 import { useState } from "react";
-
 import mainBg from "../assets/main-bg.svg";
 import playButton from "../assets/play-button.svg";
-
 import micBrown from "../assets/mic-brown.svg";
 import micWhite from "../assets/mic-white.svg";
-
 import personBrown from "../assets/person-brown.svg";
 import personWhite from "../assets/person-white.svg";
-
 import calendarBrown from "../assets/calendar-brown.svg";
 import calendarWhite from "../assets/calendar-white.svg";
-
 import checkWhite from "../assets/check.svg";
 
 type ScenarioType = "oneMinuteIntro" | "common" | "deep";
 
 type HomePageProps = {
-  onStartCommonInterview: () => void;
-  onStartOneMinuteIntro: () => void;
+  onStartCommonInterview: (userPrompt: string) => void;
+  onStartOneMinuteIntro: (userPrompt: string) => void;
 };
 
 const HomePage = ({
@@ -49,13 +44,15 @@ const HomePage = ({
   const handleStartInterview = () => {
     if (!canStartInterview) return;
 
+    const userPrompt = customInfo.trim();
+
     if (selectedScenario === "oneMinuteIntro") {
-      onStartOneMinuteIntro();
+      onStartOneMinuteIntro(userPrompt);
       return;
     }
 
     if (selectedScenario === "common") {
-      onStartCommonInterview();
+      onStartCommonInterview(userPrompt);
       return;
     }
 

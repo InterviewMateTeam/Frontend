@@ -1,46 +1,72 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
+
 import mainBg from "../assets/main-bg.svg";
 import type { InterviewRecord } from "../App";
+import type { FeedbackResponse } from "../apis/feedback";
 
 type FeedbackPageProps = {
   records: InterviewRecord[];
+  feedback: FeedbackResponse | null;
   onGoHome: () => void;
   onRetry: () => void;
 };
 
-const totalScore = 75;
+const fallbackFeedback: FeedbackResponse = {
+  totalScore: 75,
+  oneLineReview: "전달력이 매우 좋은 자기소개였습니다!",
+  overallFeedback:
+    "핵심 강점과 경험을 구체적으로 설명했어요.\n마무리에서 입사 후 포부를 조금 더 강조하면 좋을 것 같아요.",
+  summary: {
+    delivery: "우수",
+    structure: "우수",
+    confidence: "우수",
+    timeManagement: "우수",
+    logic: "보통",
+  },
+  details: {
+    delivery: {
+      score: 90,
+      feedback: "목소리 톤이 안정적이고 전달이 명확했어요.",
+    },
+    structure: {
+      score: 88,
+      feedback: "구성이 체계적이고 핵심 내용을 잘 전달했어요.",
+    },
+    confidence: {
+      score: 90,
+      feedback: "답변에서 자신감이 잘 느껴졌어요.",
+    },
+    timeManagement: {
+      score: 92,
+      feedback: "시간을 효과적으로 사용했어요.",
+    },
+    logic: {
+      score: 70,
+      feedback: "경험 설명을 더 구체화하면 좋아요.",
+    },
+  },
+  strengths: [
+    "지원 직무와 관련된 경험을 구체적으로 설명했어요.",
+    "핵심 역량을 강조하며 전달했어요.",
+    "말의 속도와 톤이 안정적이었어요.",
+  ],
+  improvements: [
+    "경험의 성과를 수치로 설명하면 더 설득력이 높아져요.",
+    "입사 후 포부를 조금 더 구체적으로 제시해보세요.",
+    "몇몇 문장에서 불필요한 반복 표현이 있었어요.",
+  ],
+};
 
-const scoreItems = [
-  {
-    title: "전달력",
-    score: 90,
-    comment: "목소리 톤이 안정적이고 전달이 명확했어요.",
-  },
-  {
-    title: "내용 구성",
-    score: 88,
-    comment: "핵심 내용을 체계적으로 전달했어요.",
-  },
-  {
-    title: "자신감",
-    score: 90,
-    comment: "답변에서 자신감이 잘 느껴졌어요.",
-  },
-  {
-    title: "시간 관리",
-    score: 92,
-    comment: "시간을 효과적으로 사용했어요.",
-  },
-  {
-    title: "논리성",
-    score: 70,
-    comment: "경험 설명을 더 구체화하면 좋아요.",
-  },
-];
-
-const FeedbackPage = ({ records, onGoHome, onRetry }: FeedbackPageProps) => {
+const FeedbackPage = ({
+  records,
+  feedback,
+  onGoHome,
+  onRetry,
+}: FeedbackPageProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const feedbackData = feedback ?? fallbackFeedback;
 
   const safeRecords =
     records.length > 0
@@ -68,11 +94,11 @@ const FeedbackPage = ({ records, onGoHome, onRetry }: FeedbackPageProps) => {
 
           <StepBar />
 
-          <SummarySection />
+          <SummarySection feedback={feedbackData} />
 
-          <ScoreSection />
+          <ScoreSection feedback={feedbackData} />
 
-          <StrengthSection />
+          <StrengthSection feedback={feedbackData} />
 
           <section className="relative z-[50] mt-[20px] mb-[34px] w-full flex justify-between items-center">
             <button
@@ -86,10 +112,7 @@ const FeedbackPage = ({ records, onGoHome, onRetry }: FeedbackPageProps) => {
             <div className="flex gap-[12px]">
               <button
                 type="button"
-                onClick={() => {
-                  console.log("면접 텍스트 전문 보기 클릭됨");
-                  setIsModalOpen(true);
-                }}
+                onClick={() => setIsModalOpen(true)}
                 className="h-[36px] px-[18px] rounded-[6px] border border-[#FF9029] bg-white/75 text-[#FF9029] text-[14px] font-bold hover:bg-[#FFF0E2]"
               >
                 면접 텍스트 전문 보기
@@ -165,23 +188,27 @@ const StepDivider = () => {
   return <div className="w-px h-[38px] bg-[#DDBE9F]" />;
 };
 
-const SummarySection = () => {
+const SummarySection = ({ feedback }: { feedback: FeedbackResponse }) => {
   return (
     <section className="mt-[16px] w-full rounded-[14px] border border-[#FF9029]/45 bg-white/75 shadow-[0_8px_24px_rgba(115,65,18,0.08)] px-[40px] py-[28px] grid grid-cols-[180px_1fr_280px] gap-[34px] items-center">
-      <TotalScore score={totalScore} />
+      <TotalScore score={feedback.totalScore} />
 
-      <MainFeedback />
+      <MainFeedback
+        title={feedback.oneLineReview}
+        description={feedback.overallFeedback}
+      />
 
-      <SummaryBox />
+      <SummaryBox summary={feedback.summary} />
     </section>
   );
 };
 
 const TotalScore = ({ score }: { score: number }) => {
+  const safeScore = Math.max(0, Math.min(100, score));
   const radius = 49;
   const stroke = 14;
   const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (score / 100) * circumference;
+  const dashOffset = circumference - (safeScore / 100) * circumference;
 
   return (
     <div className="flex flex-col items-start">
@@ -220,7 +247,7 @@ const TotalScore = ({ score }: { score: number }) => {
 
         <div className="relative z-10 flex items-end justify-center gap-[3px]">
           <span className="text-[32px] leading-none font-bold text-[#FF9029]">
-            {score}
+            {safeScore}
           </span>
 
           <span className="mb-[5px] text-[12px] leading-none font-bold text-[#FF9029]">
@@ -232,33 +259,41 @@ const TotalScore = ({ score }: { score: number }) => {
   );
 };
 
-const MainFeedback = () => {
+const MainFeedback = ({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) => {
   return (
     <div className="text-center">
       <p className="text-[24px] leading-[33px] font-bold text-[#4A2A12] break-keep">
-        전달력이 매우 좋은 자기소개였습니다!
+        {title}
       </p>
 
-      <p className="mt-[16px] text-[15px] leading-[25px] font-medium text-[#8B6F58] break-keep">
-        핵심 강점과 경험을 구체적으로 설명했어요.
-        <br />
-        마무리에서 입사 후 포부를 조금 더 강조하면 좋을 것 같아요.
+      <p className="mt-[16px] text-[15px] leading-[25px] font-medium text-[#8B6F58] break-keep whitespace-pre-wrap">
+        {description}
       </p>
     </div>
   );
 };
 
-const SummaryBox = () => {
+const SummaryBox = ({ summary }: { summary: FeedbackResponse["summary"] }) => {
   return (
     <div className="rounded-[14px] border border-[#FF9029]/45 bg-[#FFF7EF] px-[20px] py-[16px]">
       <p className="text-[17px] font-bold text-[#734112]">평가 요약</p>
 
       <div className="mt-[12px] flex flex-col gap-[8px]">
-        <SummaryRow label="전달력" value="우수" />
-        <SummaryRow label="내용 구성" value="우수" />
-        <SummaryRow label="자신감" value="우수" />
-        <SummaryRow label="시간 관리" value="우수" />
-        <SummaryRow label="논리성" value="보통" warning />
+        <SummaryRow label="전달력" value={summary.delivery} />
+        <SummaryRow label="내용 구성" value={summary.structure} />
+        <SummaryRow label="자신감" value={summary.confidence} />
+        <SummaryRow label="시간 관리" value={summary.timeManagement} />
+        <SummaryRow
+          label="논리성"
+          value={summary.logic}
+          warning={summary.logic !== "우수"}
+        />
       </div>
     </div>
   );
@@ -288,7 +323,35 @@ const SummaryRow = ({
   );
 };
 
-const ScoreSection = () => {
+const ScoreSection = ({ feedback }: { feedback: FeedbackResponse }) => {
+  const scoreItems = [
+    {
+      title: "전달력",
+      score: feedback.details.delivery.score,
+      comment: feedback.details.delivery.feedback,
+    },
+    {
+      title: "내용 구성",
+      score: feedback.details.structure.score,
+      comment: feedback.details.structure.feedback,
+    },
+    {
+      title: "자신감",
+      score: feedback.details.confidence.score,
+      comment: feedback.details.confidence.feedback,
+    },
+    {
+      title: "시간 관리",
+      score: feedback.details.timeManagement.score,
+      comment: feedback.details.timeManagement.feedback,
+    },
+    {
+      title: "논리성",
+      score: feedback.details.logic.score,
+      comment: feedback.details.logic.feedback,
+    },
+  ];
+
   return (
     <section className="mt-[24px] w-full">
       <p className="text-[17px] font-bold text-[#4A2A12]">세부 평가</p>
@@ -316,6 +379,8 @@ const ScoreCard = ({
   score: number;
   comment: string;
 }) => {
+  const safeScore = Math.max(0, Math.min(100, score));
+
   return (
     <div className="min-h-[154px] rounded-[12px] border border-[#FF9029]/45 bg-white/78 px-[18px] py-[16px] flex flex-col justify-between">
       <div>
@@ -324,12 +389,12 @@ const ScoreCard = ({
         <div className="mt-[16px] h-[8px] rounded-full bg-[#FFE0C0] overflow-hidden">
           <div
             className="h-full rounded-full bg-[#FF9029]"
-            style={{ width: `${score}%` }}
+            style={{ width: `${safeScore}%` }}
           />
         </div>
 
         <p className="mt-[10px] text-center text-[15px] font-bold text-[#734112]">
-          {score} / 100
+          {safeScore} / 100
         </p>
       </div>
 
@@ -340,27 +405,15 @@ const ScoreCard = ({
   );
 };
 
-const StrengthSection = () => {
+const StrengthSection = ({ feedback }: { feedback: FeedbackResponse }) => {
   return (
     <section className="mt-[14px] w-full grid grid-cols-2 gap-[12px]">
-      <FeedbackListBox
-        type="good"
-        title="강점"
-        items={[
-          "지원 직무와 관련된 경험을 구체적으로 설명했어요.",
-          "핵심 역량을 강조하며 전달했어요.",
-          "말의 속도와 톤이 안정적이었어요.",
-        ]}
-      />
+      <FeedbackListBox type="good" title="강점" items={feedback.strengths} />
 
       <FeedbackListBox
         type="bad"
         title="개선할 점"
-        items={[
-          "경험의 성과를 수치로 설명하면 더 설득력이 높아져요.",
-          "입사 후 포부를 조금 더 구체적으로 제시해보세요.",
-          "몇몇 문장에서 불필요한 반복 표현이 있었어요.",
-        ]}
+        items={feedback.improvements}
       />
     </section>
   );
@@ -384,9 +437,11 @@ const FeedbackListBox = ({
       <p className="text-[17px] font-bold text-[#734112]">{title}</p>
 
       <ul className="mt-[16px] text-[14px] leading-[25px] text-[#6B5A4A] list-disc pl-[18px] break-keep">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
+        {items.length > 0 ? (
+          items.map((item) => <li key={item}>{item}</li>)
+        ) : (
+          <li>아직 분석 결과가 없습니다.</li>
+        )}
       </ul>
     </div>
   );

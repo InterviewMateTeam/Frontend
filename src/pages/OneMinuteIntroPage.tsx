@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-
 import mainBg from "../assets/main-bg.svg";
 import micWhite from "../assets/mic-white.svg";
-
 import type { InterviewRecord } from "../App";
+import { postSttAudio } from "../apis/stt";
 
 type OneMinuteIntroPageProps = {
   onFinishInterview: (records: InterviewRecord[]) => void;
@@ -106,7 +105,9 @@ const OneMinuteIntroPage = ({
 
         try {
           setIsSubmitting(true);
-          const text = await requestStt(audioBlob);
+
+          const text = await postSttAudio(audioBlob);
+
           setAnswer(text);
         } catch (error) {
           console.error(error);
@@ -143,22 +144,7 @@ const OneMinuteIntroPage = ({
     await handleStartRecording();
   };
 
-  const requestStt = async (audioBlob: Blob) => {
-    const formData = new FormData();
-    formData.append("audio", audioBlob, "one-minute-intro.webm");
-
-    const response = await fetch("/api/stt", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error("STT 요청 실패");
-    }
-
-    const data = await response.json();
-    return (data.text as string) ?? "";
-  };
+  
 
   const handleFinishInterview = () => {
     const records: InterviewRecord[] = [
