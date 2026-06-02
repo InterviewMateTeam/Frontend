@@ -1,15 +1,18 @@
 const BASE_URL = "https://interviewmate-backend-5agn.onrender.com";
 
 export type SubmitAnswerRequest = {
-  questionId: number;
+  sessionId: number;
+  questionText: string;
   answerText: string;
   answerDuration: number;
 };
 
 export type SubmitAnswerResponse = {
   answerId: number;
+  questionText: string;
   answerText: string;
   answerDuration: number;
+  feedback: string;
 };
 
 export const submitAnswer = async (

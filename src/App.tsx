@@ -24,15 +24,22 @@ import {
   type FeedbackResponse,
 } from "./apis/feedback";
 
+import {
+  analyzeInterview,
+  type AnalyzeResponse,
+} from "./apis/analyze";
+
 export type InterviewRecord = {
   stepTitle: string;
   aiQuestion: string;
   userAnswer: string;
 };
 
+export type FeedbackData = FeedbackResponse | AnalyzeResponse;
+
 type FeedbackLocationState = {
   records?: InterviewRecord[];
-  feedback?: FeedbackResponse | null;
+  feedback?: FeedbackData | null;
 };
 
 function App() {
@@ -45,8 +52,9 @@ function App() {
   const [currentSession, setCurrentSession] =
     useState<CreateSessionResponse | null>(null);
 
-  const [feedbackResult, setFeedbackResult] =
-    useState<FeedbackResponse | null>(null);
+  const [feedbackResult, setFeedbackResult] = useState<FeedbackData | null>(
+    null
+  );
 
   const handleGoHome = () => {
     setInterviewRecords([]);
@@ -105,18 +113,47 @@ function App() {
     }
   };
 
+  const makeAnalyzeText = (records: InterviewRecord[]) => {
+    return records
+      .map((record) => record.userAnswer)
+      .filter((answer) => answer.trim().length > 0)
+      .join("\n\n");
+  };
+
   const handleFinishInterview = async (records: InterviewRecord[]) => {
     try {
-      let feedback: FeedbackResponse | null = null;
+      let feedback: FeedbackData | null = null;
 
       if (currentSession?.sessionId) {
-        const endResult = await endInterviewSession(currentSession.sessionId);
-        console.log("면접 세션 종료:", endResult);
+        try {
+          const endResult = await endInterviewSession(currentSession.sessionId);
+          console.log("면접 세션 종료:", endResult);
+        } catch (error) {
+          console.warn("면접 종료 API 실패. 피드백 생성은 계속 진행합니다.", error);
+        }
 
-        feedback = await getFeedbackBySessionId(currentSession.sessionId);
-        console.log("피드백 조회 완료:", feedback);
-      } else {
-        console.warn("currentSession이 없어서 피드백 조회를 건너뜀");
+        try {
+          feedback = await getFeedbackBySessionId(currentSession.sessionId);
+          console.log("저장된 피드백 조회 완료:", feedback);
+        } catch (error) {
+          console.warn(
+            "저장된 피드백 조회 실패. /api/gemini/analyze로 대체합니다.",
+            error
+          );
+        }
+      }
+
+      if (!feedback) {
+        const combinedAnswerText = makeAnalyzeText(records);
+
+        console.log("Gemini analyze에 보낼 텍스트:", combinedAnswerText);
+
+        if (combinedAnswerText.trim().length > 0) {
+          feedback = await analyzeInterview(combinedAnswerText);
+          console.log("Gemini 직접 피드백 생성 완료:", feedback);
+        } else {
+          console.warn("분석할 답변 텍스트가 없습니다.");
+        }
       }
 
       setInterviewRecords(records);
@@ -130,7 +167,7 @@ function App() {
       });
     } catch (error) {
       console.error(error);
-      alert("면접 종료 또는 피드백 조회 중 오류가 발생했어요.");
+      alert("피드백 생성 중 오류가 발생했어요.");
 
       setInterviewRecords(records);
       setFeedbackResult(null);
@@ -179,6 +216,7 @@ function App() {
         path="/interview/intro"
         element={
           <OneMinuteIntroPage
+            sessionId={currentSession?.sessionId ?? null}
             onFinishInterview={handleFinishInterview}
             onGoHome={handleGoHome}
           />
@@ -204,7 +242,7 @@ function App() {
 
 type FeedbackRouteProps = {
   fallbackRecords: InterviewRecord[];
-  fallbackFeedback: FeedbackResponse | null;
+  fallbackFeedback: FeedbackData | null;
   onGoHome: () => void;
   onRetry: () => void;
 };

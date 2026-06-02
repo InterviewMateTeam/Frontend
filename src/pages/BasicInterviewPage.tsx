@@ -9,6 +9,7 @@ import refreshBrown from "../assets/refresh-brown.svg";
 import { postSttAudio } from "../apis/stt";
 import { submitAnswer } from "../apis/answer";
 import { generateQuestion, type InterviewStage } from "../apis/question";
+import { getAudioDuration } from "../utils/audio";
 
 import type { InterviewRecord } from "../App";
 
@@ -31,7 +32,7 @@ const steps: {
     title: "자기소개",
     subtitle: "현재 진행",
     progressTitle: "자기소개",
-    stage: "INTRODUCTION",
+    stage: "INTRO",
     fallbackQuestion: "안녕하세요. 먼저 자기소개를 해주세요.",
   },
   {
@@ -62,13 +63,9 @@ const BasicInterviewPage = ({
 
   const [myAnswer, setMyAnswer] = useState("");
   const [aiText, setAiText] = useState(steps[0].fallbackQuestion);
-  const [currentQuestionId, setCurrentQuestionId] = useState<number | null>(
-    null
-  );
 
   const [loadingType, setLoadingType] = useState<LoadingType>(null);
   const [records, setRecords] = useState<InterviewRecord[]>([]);
-
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(
     null
   );
@@ -96,7 +93,6 @@ const BasicInterviewPage = ({
   ) => {
     if (!sessionId) {
       setAiText(steps[step].fallbackQuestion);
-      setCurrentQuestionId(null);
       return;
     }
 
@@ -105,20 +101,18 @@ const BasicInterviewPage = ({
 
       const result = await generateQuestion({
         sessionId,
-        mode: "BASIC",
+        mode: "COMMON",
         stage: steps[step].stage,
         previousAnswer,
+        userInput: "",
         questionOrder: step + 1,
       });
 
-      setAiText(result.questionText);
-      setCurrentQuestionId(result.questionId);
-
       console.log("질문 생성 완료:", result);
+      setAiText(result.question);
     } catch (error) {
       console.error(error);
       setAiText(steps[step].fallbackQuestion);
-      setCurrentQuestionId(null);
     } finally {
       setIsQuestionLoading(false);
     }
@@ -131,9 +125,7 @@ const BasicInterviewPage = ({
   const createCurrentRecord = (): InterviewRecord | null => {
     const answer = getCurrentAnswer();
 
-    if (!answer) {
-      return null;
-    }
+    if (!answer) return null;
 
     return {
       stepTitle: steps[currentStep].title,
@@ -142,18 +134,26 @@ const BasicInterviewPage = ({
     };
   };
 
-  const submitCurrentAnswer = async (answerText: string) => {
-    const answerDuration = recordingStartedAt
-      ? Math.max(1, Math.round((Date.now() - recordingStartedAt) / 1000))
-      : 0;
+  const submitCurrentAnswer = async (
+    answerText: string,
+    durationOverride?: number
+  ) => {
+    const rawDuration =
+      durationOverride ??
+      (recordingStartedAt
+        ? Math.round((Date.now() - recordingStartedAt) / 1000)
+        : 1);
 
-    if (!currentQuestionId) {
-      console.warn("currentQuestionId가 없어 답변 제출을 건너뜀");
+    const answerDuration = Math.max(1, rawDuration);
+
+    if (!sessionId) {
+      console.warn("sessionId가 없어 /api/answers 제출을 건너뜁니다.");
       return;
     }
 
     const result = await submitAnswer({
-      questionId: currentQuestionId,
+      sessionId,
+      questionText: aiText || steps[currentStep].fallbackQuestion,
       answerText,
       answerDuration,
     });
@@ -178,7 +178,6 @@ const BasicInterviewPage = ({
       setCurrentStep(nextStep);
       setMyAnswer("");
       latestAnswerRef.current = "";
-      setCurrentQuestionId(null);
       setRecordingStartedAt(null);
 
       await requestQuestion(nextStep, currentRecord?.userAnswer ?? "");
@@ -243,7 +242,14 @@ const BasicInterviewPage = ({
           setMyAnswer(trimmedText);
           latestAnswerRef.current = trimmedText;
 
-          await submitCurrentAnswer(trimmedText);
+          try {
+            await submitCurrentAnswer(trimmedText);
+          } catch (error) {
+            console.warn(
+              "답변 저장 API 실패. 피드백 직접 생성으로 진행합니다.",
+              error
+            );
+          }
 
           if (currentStep < 2) {
             setTimeout(() => {
@@ -252,7 +258,7 @@ const BasicInterviewPage = ({
           }
         } catch (error) {
           console.error(error);
-          alert("음성 변환 또는 답변 제출 중 오류가 발생했어요.");
+          alert("음성 변환 중 오류가 발생했어요.");
         } finally {
           setIsSubmitting(false);
         }
@@ -285,6 +291,60 @@ const BasicInterviewPage = ({
     await handleStartRecording();
   };
 
+  const handleAudioFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    if (loadingType || isSubmitting || isQuestionLoading) return;
+
+    if (!file.type.startsWith("audio/")) {
+      alert("오디오 파일만 업로드할 수 있어요.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      const duration = await getAudioDuration(file);
+      const text = await postSttAudio(file);
+      const trimmedText = text.trim();
+
+      if (!trimmedText) {
+        alert("음성이 잘 인식되지 않았어요. 다른 파일로 다시 시도해주세요.");
+        return;
+      }
+
+      setMyAnswer(trimmedText);
+      latestAnswerRef.current = trimmedText;
+
+      try {
+        await submitCurrentAnswer(trimmedText, duration);
+      } catch (error) {
+        console.warn(
+          "답변 저장 API 실패. 피드백 직접 생성으로 진행합니다.",
+          error
+        );
+      }
+
+      console.log("업로드 파일 답변 처리 완료");
+
+      if (currentStep < 2) {
+        setTimeout(() => {
+          moveToNextStepWithLoading();
+        }, 500);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("오디오 파일 변환 중 오류가 발생했어요.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleFinishInterview = () => {
     if (isRecording) {
       alert("먼저 마이크를 다시 눌러 녹음을 종료해주세요.");
@@ -292,7 +352,9 @@ const BasicInterviewPage = ({
     }
 
     if (isSubmitting) {
-      alert("음성을 텍스트로 변환하고 답변을 제출 중입니다. 잠시만 기다려주세요.");
+      alert(
+        "음성을 텍스트로 변환하고 답변을 제출 중입니다. 잠시만 기다려주세요."
+      );
       return;
     }
 
@@ -306,6 +368,11 @@ const BasicInterviewPage = ({
     const finalRecords = currentRecord
       ? [...records, currentRecord]
       : records;
+
+    if (finalRecords.length === 0) {
+      alert("먼저 답변을 녹음하거나 오디오 파일을 업로드해주세요.");
+      return;
+    }
 
     setLoadingType("feedback");
 
@@ -338,7 +405,7 @@ const BasicInterviewPage = ({
             </div>
 
             <p className="mt-[10px] text-[13px] font-semibold text-[#9A6A42]">
-              마이크를 눌러 답변을 시작하세요
+              마이크 녹음 또는 오디오 파일 업로드로 답변할 수 있어요.
             </p>
           </section>
 
@@ -356,53 +423,11 @@ const BasicInterviewPage = ({
 
           <div className="mt-[34px] w-full max-w-[950px] h-px bg-[#E8DDD4]" />
 
-          <div
-            className={`
-              mt-[22px] px-[22px] h-[36px] rounded-full
-              flex items-center justify-center border shadow-sm
-              ${
-                isRecording
-                  ? "bg-[#FFF0E2] border-[#FF9029]/60"
-                  : isSubmitting || isQuestionLoading
-                  ? "bg-[#EEF3EA] border-[#C8D5C1]"
-                  : "bg-white/85 border-[#E4CDB8]"
-              }
-            `}
-          >
-            <span
-              className={`
-                w-[9px] h-[9px] rounded-full mr-[8px]
-                ${
-                  isRecording
-                    ? "bg-[#FF9029] animate-pulse"
-                    : isSubmitting || isQuestionLoading
-                    ? "bg-[#95AA8D] animate-pulse"
-                    : "bg-[#C89568]"
-                }
-              `}
-            />
-
-            <p
-              className={`
-                text-[13px] font-bold
-                ${
-                  isRecording
-                    ? "text-[#FF9029]"
-                    : isSubmitting || isQuestionLoading
-                    ? "text-[#738267]"
-                    : "text-[#734112]"
-                }
-              `}
-            >
-              {isQuestionLoading
-                ? "AI 질문을 생성 중입니다"
-                : isSubmitting
-                ? "음성을 텍스트로 변환하고 답변을 제출 중입니다"
-                : isRecording
-                ? "녹음 중 · 말을 마쳤다면 마이크를 한 번 더 눌러 종료하세요"
-                : "면접 진행 중 · 마이크를 누르면 녹음이 시작됩니다"}
-            </p>
-          </div>
+          <StatusBadge
+            isRecording={isRecording}
+            isSubmitting={isSubmitting}
+            isQuestionLoading={isQuestionLoading}
+          />
 
           <section className="mt-[22px] flex flex-col items-center">
             <button
@@ -430,6 +455,28 @@ const BasicInterviewPage = ({
               />
             </button>
 
+            <label
+              className={`
+                mt-[14px] h-[34px] px-[18px] rounded-full border border-[#FF9029]/60
+                bg-white/80 text-[#FF9029] text-[12px] font-bold
+                flex items-center justify-center cursor-pointer
+                hover:bg-[#FFF0E2] transition
+                ${
+                  isSubmitting || isQuestionLoading || isRecording
+                    ? "opacity-60 pointer-events-none"
+                    : ""
+                }
+              `}
+            >
+              오디오 파일 업로드
+              <input
+                type="file"
+                accept="audio/*,.webm,.wav,.mp3,.m4a"
+                onChange={handleAudioFileUpload}
+                className="hidden"
+              />
+            </label>
+
             <p className="mt-[20px] text-[18px] font-bold text-[#734112]">
               {isQuestionLoading
                 ? "질문 생성 중"
@@ -438,16 +485,6 @@ const BasicInterviewPage = ({
                 : isRecording
                 ? "다 말했으면 마이크를 한 번 더 눌러 종료"
                 : "답하여 말하기"}
-            </p>
-
-            <p className="mt-[6px] text-[12px] font-semibold text-[#8B6F58]">
-              {isQuestionLoading
-                ? "AI가 다음 면접 질문을 준비하고 있어요."
-                : isSubmitting
-                ? "녹음된 음성을 텍스트로 변환하고 답변을 저장하고 있어요."
-                : isRecording
-                ? "종료 후 자동으로 다음 단계 로딩 화면이 표시됩니다."
-                : "마이크를 누르면 녹음이 시작됩니다."}
             </p>
           </section>
 
@@ -470,8 +507,8 @@ const BasicInterviewPage = ({
               text={
                 myAnswer ||
                 (isSubmitting
-                  ? "음성을 텍스트로 변환하고 답변을 제출하고 있습니다."
-                  : "마이크를 누르고 답변하면 여기에 텍스트로 표시됩니다.")
+                  ? "음성을 텍스트로 변환하고 답변을 처리하고 있습니다."
+                  : "마이크로 답변하거나 오디오 파일을 업로드하면 여기에 텍스트로 표시됩니다.")
               }
               onButtonClick={handleFinishInterview}
             />
@@ -482,11 +519,71 @@ const BasicInterviewPage = ({
   );
 };
 
-type InterviewLoadingPageProps = {
-  type: Exclude<LoadingType, null>;
+const StatusBadge = ({
+  isRecording,
+  isSubmitting,
+  isQuestionLoading,
+}: {
+  isRecording: boolean;
+  isSubmitting: boolean;
+  isQuestionLoading: boolean;
+}) => {
+  return (
+    <div
+      className={`
+        mt-[22px] px-[22px] h-[36px] rounded-full
+        flex items-center justify-center border shadow-sm
+        ${
+          isRecording
+            ? "bg-[#FFF0E2] border-[#FF9029]/60"
+            : isSubmitting || isQuestionLoading
+            ? "bg-[#EEF3EA] border-[#C8D5C1]"
+            : "bg-white/85 border-[#E4CDB8]"
+        }
+      `}
+    >
+      <span
+        className={`
+          w-[9px] h-[9px] rounded-full mr-[8px]
+          ${
+            isRecording
+              ? "bg-[#FF9029] animate-pulse"
+              : isSubmitting || isQuestionLoading
+              ? "bg-[#95AA8D] animate-pulse"
+              : "bg-[#C89568]"
+          }
+        `}
+      />
+
+      <p
+        className={`
+          text-[13px] font-bold
+          ${
+            isRecording
+              ? "text-[#FF9029]"
+              : isSubmitting || isQuestionLoading
+              ? "text-[#738267]"
+              : "text-[#734112]"
+          }
+        `}
+      >
+        {isQuestionLoading
+          ? "AI 질문을 생성 중입니다"
+          : isSubmitting
+          ? "음성을 텍스트로 변환하고 답변을 처리 중입니다"
+          : isRecording
+          ? "녹음 중 · 말을 마쳤다면 마이크를 한 번 더 눌러 종료하세요"
+          : "면접 진행 중 · 마이크 녹음 또는 파일 업로드가 가능합니다"}
+      </p>
+    </div>
+  );
 };
 
-const InterviewLoadingPage = ({ type }: InterviewLoadingPageProps) => {
+const InterviewLoadingPage = ({
+  type,
+}: {
+  type: Exclude<LoadingType, null>;
+}) => {
   const isFeedback = type === "feedback";
 
   return (
@@ -518,19 +615,17 @@ const LoadingBars = () => {
   );
 };
 
-type StepBlockProps = {
-  index: number;
-  currentStep: InterviewStep;
-  title: string;
-  defaultSubtitle: string;
-};
-
 const StepBlock = ({
   index,
   currentStep,
   title,
   defaultSubtitle,
-}: StepBlockProps) => {
+}: {
+  index: number;
+  currentStep: InterviewStep;
+  title: string;
+  defaultSubtitle: string;
+}) => {
   const isDone = index < currentStep;
   const isCurrent = index === currentStep;
   const isLast = index === steps.length - 1;
@@ -557,7 +652,6 @@ const StepBlock = ({
 
         <div>
           <p className="text-[15px] font-bold text-[#734112]">{title}</p>
-
           <p
             className={`mt-[4px] text-[10px] font-semibold ${
               isDone || isCurrent ? "text-[#FF9029]" : "text-[#9B7A60]"
@@ -583,15 +677,6 @@ const StepBlock = ({
   );
 };
 
-type AnswerBoxProps = {
-  icon: string;
-  refreshIcon?: string;
-  title: string;
-  buttonText: string;
-  text?: string;
-  onButtonClick?: () => void;
-};
-
 const AnswerBox = ({
   icon,
   refreshIcon,
@@ -599,7 +684,14 @@ const AnswerBox = ({
   buttonText,
   text,
   onButtonClick,
-}: AnswerBoxProps) => {
+}: {
+  icon: string;
+  refreshIcon?: string;
+  title: string;
+  buttonText: string;
+  text?: string;
+  onButtonClick?: () => void;
+}) => {
   return (
     <div className="relative h-[500px] rounded-[10px] border border-[#FF9029]/50 bg-[#FFFAF5]">
       <div className="absolute left-[16px] top-[14px] flex items-center gap-[8px]">
@@ -608,11 +700,7 @@ const AnswerBox = ({
       </div>
 
       <div className="absolute left-[20px] right-[20px] top-[58px] bottom-[56px] overflow-y-auto">
-        <p
-          className={`whitespace-pre-wrap text-[14px] leading-[24px] ${
-            text ? "text-[#4A2A12]" : "text-[#B8A99B]"
-          }`}
-        >
+        <p className="whitespace-pre-wrap text-[14px] leading-[24px] text-[#4A2A12]">
           {text}
         </p>
       </div>
@@ -620,15 +708,7 @@ const AnswerBox = ({
       <button
         type="button"
         onClick={onButtonClick}
-        className={`
-          absolute right-[16px] bottom-[14px] h-[28px] px-[12px] rounded-full
-          flex items-center gap-[6px] text-[12px] font-bold
-          ${
-            onButtonClick
-              ? "bg-white/80 text-[#734112] border border-[#D8BFA8] cursor-pointer hover:bg-[#FFF0E2]"
-              : "bg-transparent text-[#734112] cursor-pointer"
-          }
-        `}
+        className="absolute right-[16px] bottom-[14px] h-[28px] px-[12px] rounded-full flex items-center gap-[6px] text-[12px] font-bold bg-white/80 text-[#734112] border border-[#D8BFA8] cursor-pointer hover:bg-[#FFF0E2]"
       >
         {refreshIcon && (
           <img

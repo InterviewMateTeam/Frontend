@@ -1,26 +1,24 @@
 const BASE_URL = "https://interviewmate-backend-5agn.onrender.com";
 
-export type InterviewMode = "BASIC" | "ADVANCED";
+export type InterviewMode = "COMMON" | "ADVANCED";
 
-export type InterviewStage =
-  | "INTRODUCTION"
-  | "PERSONALITY"
-  | "TECHNICAL"
-  | "FINAL";
+export type InterviewStage = "INTRO" | "PERSONALITY" | "TECHNICAL" | "FINAL";
 
 export type GenerateQuestionRequest = {
   sessionId: number;
   mode: InterviewMode;
   stage: InterviewStage;
   previousAnswer?: string;
+  userInput?: string;
   questionOrder: number;
 };
 
 export type GenerateQuestionResponse = {
-  questionId: number;
-  questionText: string;
+  sessionId: number;
+  mode: InterviewMode;
   stage: InterviewStage;
   questionOrder: number;
+  question: string;
 };
 
 export const generateQuestion = async (

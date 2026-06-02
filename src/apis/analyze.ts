@@ -1,9 +1,5 @@
 const BASE_URL = "https://interviewmate-backend-5agn.onrender.com";
 
-export type AnalyzeRequest = {
-  answerText: string;
-};
-
 export type AnalyzeSummary = {
   delivery: string;
   structure: string;
@@ -35,24 +31,58 @@ export type AnalyzeResponse = {
   improvements: string[];
 };
 
+const stripCodeFence = (value: string) => {
+  return value
+    .trim()
+    .replace(/^```json/i, "")
+    .replace(/^```/i, "")
+    .replace(/```$/i, "")
+    .trim();
+};
+
+const parseAnalyzeResponse = (rawText: string): AnalyzeResponse => {
+  const parsed = JSON.parse(stripCodeFence(rawText));
+
+  if (typeof parsed.feedback === "string") {
+    return JSON.parse(stripCodeFence(parsed.feedback));
+  }
+
+  if (typeof parsed.feedbackJson === "string") {
+    return JSON.parse(stripCodeFence(parsed.feedbackJson));
+  }
+
+  return parsed;
+};
+
 export const analyzeInterview = async (
   answerText: string
 ): Promise<AnalyzeResponse> => {
+  const trimmedAnswerText = answerText.trim();
+
+  if (!trimmedAnswerText) {
+    throw new Error("분석할 답변 텍스트가 없습니다.");
+  }
+
+  console.log("분석 요청 body:", {
+    answerText: trimmedAnswerText,
+  });
+
   const response = await fetch(`${BASE_URL}/api/gemini/analyze`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      answerText,
+      answerText: trimmedAnswerText,
     }),
   });
 
+  const rawText = await response.text();
+
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("전체 피드백 생성 실패:", response.status, errorText);
+    console.error("전체 피드백 생성 실패:", response.status, rawText);
     throw new Error("전체 피드백 생성에 실패했습니다.");
   }
 
-  return response.json();
+  return parseAnalyzeResponse(rawText);
 };
