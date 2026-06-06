@@ -2,16 +2,17 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 
 import mainBg from "../assets/main-bg.svg";
-import type { InterviewRecord, FeedbackData } from "../App";
+import type { InterviewRecord } from "../App";
+import type { FeedbackResponse } from "../apis/feedback";
 
 type FeedbackPageProps = {
   records: InterviewRecord[];
-  feedback: FeedbackData | null;
+  feedback: FeedbackResponse | null;
   onGoHome: () => void;
   onRetry: () => void;
 };
 
-const fallbackFeedback: FeedbackData = {
+const fallbackFeedback: FeedbackResponse = {
   totalScore: 75,
   oneLineReview: "전달력이 매우 좋은 자기소개였습니다!",
   overallFeedback:
@@ -187,7 +188,7 @@ const StepDivider = () => {
   return <div className="w-px h-[38px] bg-[#DDBE9F]" />;
 };
 
-const SummarySection = ({ feedback }: { feedback: FeedbackData }) => {
+const SummarySection = ({ feedback }: { feedback: FeedbackResponse }) => {
   return (
     <section className="mt-[16px] w-full rounded-[14px] border border-[#FF9029]/45 bg-white/75 shadow-[0_8px_24px_rgba(115,65,18,0.08)] px-[40px] py-[28px] grid grid-cols-[180px_1fr_280px] gap-[34px] items-center">
       <TotalScore score={feedback.totalScore} />
@@ -278,7 +279,11 @@ const MainFeedback = ({
   );
 };
 
-const SummaryBox = ({ summary }: { summary: FeedbackData["summary"] }) => {
+const SummaryBox = ({
+  summary,
+}: {
+  summary: FeedbackResponse["summary"];
+}) => {
   return (
     <div className="rounded-[14px] border border-[#FF9029]/45 bg-[#FFF7EF] px-[20px] py-[16px]">
       <p className="text-[17px] font-bold text-[#734112]">평가 요약</p>
@@ -322,7 +327,7 @@ const SummaryRow = ({
   );
 };
 
-const ScoreSection = ({ feedback }: { feedback: FeedbackData }) => {
+const ScoreSection = ({ feedback }: { feedback: FeedbackResponse }) => {
   const scoreItems = [
     {
       title: "전달력",
@@ -404,7 +409,7 @@ const ScoreCard = ({
   );
 };
 
-const StrengthSection = ({ feedback }: { feedback: FeedbackData }) => {
+const StrengthSection = ({ feedback }: { feedback: FeedbackResponse }) => {
   return (
     <section className="mt-[14px] w-full grid grid-cols-2 gap-[12px]">
       <FeedbackListBox type="good" title="강점" items={feedback.strengths} />
