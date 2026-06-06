@@ -19,6 +19,10 @@ export type GenerateQuestionResponse = {
   stage: InterviewStage;
   questionOrder: number;
   question: string;
+
+  // TTS 추가
+  questionAudioBase64?: string;
+  questionAudioContentType?: string;
 };
 
 export const generateQuestion = async (

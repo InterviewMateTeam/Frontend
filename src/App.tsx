@@ -7,7 +7,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-import HomePage from "./pages/HomePage";
+import HomePage, { type InterviewMode } from "./pages/HomePage";
 import BasicInterviewPage from "./pages/BasicInterviewPage";
 import OneMinuteIntroPage from "./pages/OneMinuteIntroPage";
 import FeedbackPage from "./pages/FeedbackPage";
@@ -24,22 +24,15 @@ import {
   type FeedbackResponse,
 } from "./apis/feedback";
 
-import {
-  analyzeInterview,
-  type AnalyzeResponse,
-} from "./apis/analyze";
-
 export type InterviewRecord = {
   stepTitle: string;
   aiQuestion: string;
   userAnswer: string;
 };
 
-export type FeedbackData = FeedbackResponse | AnalyzeResponse;
-
 type FeedbackLocationState = {
   records?: InterviewRecord[];
-  feedback?: FeedbackData | null;
+  feedback?: FeedbackResponse | null;
 };
 
 function App() {
@@ -52,22 +45,28 @@ function App() {
   const [currentSession, setCurrentSession] =
     useState<CreateSessionResponse | null>(null);
 
-  const [feedbackResult, setFeedbackResult] = useState<FeedbackData | null>(
-    null
-  );
+  const [feedbackResult, setFeedbackResult] =
+    useState<FeedbackResponse | null>(null);
+
+  const [currentInterviewMode, setCurrentInterviewMode] =
+    useState<InterviewMode>("COMMON");
 
   const handleGoHome = () => {
     setInterviewRecords([]);
     setCurrentSession(null);
     setFeedbackResult(null);
+    setCurrentInterviewMode("COMMON");
     navigate("/home");
   };
 
-  const handleStartCommonInterview = async (userPrompt: string) => {
+  const handleStartCommonInterview = async (
+    userPrompt: string,
+    interviewMode: InterviewMode
+  ) => {
     try {
       const session = await createInterviewSession({
         mode: "MOCK",
-        totalQuestionCount: 3,
+        totalQuestionCount: 7,
       });
 
       console.log("면접 세션 시작:", session);
@@ -80,7 +79,10 @@ function App() {
       console.log("사용자 입력 저장 완료");
 
       setCurrentSession(session);
+      setCurrentInterviewMode(interviewMode);
       setFeedbackResult(null);
+      setInterviewRecords([]);
+
       navigate("/interview/common");
     } catch (error) {
       console.error(error);
@@ -105,7 +107,10 @@ function App() {
       console.log("사용자 입력 저장 완료");
 
       setCurrentSession(session);
+      setCurrentInterviewMode("COMMON");
       setFeedbackResult(null);
+      setInterviewRecords([]);
+
       navigate("/interview/intro");
     } catch (error) {
       console.error(error);
@@ -113,46 +118,23 @@ function App() {
     }
   };
 
-  const makeAnalyzeText = (records: InterviewRecord[]) => {
-    return records
-      .map((record) => record.userAnswer)
-      .filter((answer) => answer.trim().length > 0)
-      .join("\n\n");
-  };
-
   const handleFinishInterview = async (records: InterviewRecord[]) => {
     try {
-      let feedback: FeedbackData | null = null;
+      let feedback: FeedbackResponse | null = null;
 
       if (currentSession?.sessionId) {
         try {
           const endResult = await endInterviewSession(currentSession.sessionId);
           console.log("면접 세션 종료:", endResult);
         } catch (error) {
-          console.warn("면접 종료 API 실패. 피드백 생성은 계속 진행합니다.", error);
+          console.warn("면접 종료 API 실패:", error);
         }
 
         try {
           feedback = await getFeedbackBySessionId(currentSession.sessionId);
           console.log("저장된 피드백 조회 완료:", feedback);
         } catch (error) {
-          console.warn(
-            "저장된 피드백 조회 실패. /api/gemini/analyze로 대체합니다.",
-            error
-          );
-        }
-      }
-
-      if (!feedback) {
-        const combinedAnswerText = makeAnalyzeText(records);
-
-        console.log("Gemini analyze에 보낼 텍스트:", combinedAnswerText);
-
-        if (combinedAnswerText.trim().length > 0) {
-          feedback = await analyzeInterview(combinedAnswerText);
-          console.log("Gemini 직접 피드백 생성 완료:", feedback);
-        } else {
-          console.warn("분석할 답변 텍스트가 없습니다.");
+          console.error("피드백 조회 실패:", error);
         }
       }
 
@@ -167,7 +149,7 @@ function App() {
       });
     } catch (error) {
       console.error(error);
-      alert("피드백 생성 중 오류가 발생했어요.");
+      alert("피드백 화면 이동 중 오류가 발생했어요.");
 
       setInterviewRecords(records);
       setFeedbackResult(null);
@@ -185,6 +167,7 @@ function App() {
     setInterviewRecords([]);
     setCurrentSession(null);
     setFeedbackResult(null);
+    setCurrentInterviewMode("COMMON");
     navigate("/home");
   };
 
@@ -207,6 +190,7 @@ function App() {
         element={
           <BasicInterviewPage
             sessionId={currentSession?.sessionId ?? null}
+            interviewMode={currentInterviewMode}
             onFinishInterview={handleFinishInterview}
           />
         }
@@ -242,7 +226,7 @@ function App() {
 
 type FeedbackRouteProps = {
   fallbackRecords: InterviewRecord[];
-  fallbackFeedback: FeedbackData | null;
+  fallbackFeedback: FeedbackResponse | null;
   onGoHome: () => void;
   onRetry: () => void;
 };

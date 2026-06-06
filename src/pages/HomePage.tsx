@@ -1,18 +1,28 @@
 import { useState } from "react";
+
 import mainBg from "../assets/main-bg.svg";
 import playButton from "../assets/play-button.svg";
+
 import micBrown from "../assets/mic-brown.svg";
 import micWhite from "../assets/mic-white.svg";
+
 import personBrown from "../assets/person-brown.svg";
 import personWhite from "../assets/person-white.svg";
+
 import calendarBrown from "../assets/calendar-brown.svg";
 import calendarWhite from "../assets/calendar-white.svg";
+
 import checkWhite from "../assets/check.svg";
+
+export type InterviewMode = "COMMON" | "ADVANCED";
 
 type ScenarioType = "oneMinuteIntro" | "common" | "deep";
 
 type HomePageProps = {
-  onStartCommonInterview: (userPrompt: string) => void;
+  onStartCommonInterview: (
+    userPrompt: string,
+    interviewMode: InterviewMode
+  ) => void;
   onStartOneMinuteIntro: (userPrompt: string) => void;
 };
 
@@ -52,11 +62,14 @@ const HomePage = ({
     }
 
     if (selectedScenario === "common") {
-      onStartCommonInterview(userPrompt);
+      onStartCommonInterview(userPrompt, "COMMON");
       return;
     }
 
-    alert("아직 준비 중인 면접 유형입니다.");
+    if (selectedScenario === "deep") {
+      onStartCommonInterview(userPrompt, "ADVANCED");
+      return;
+    }
   };
 
   return (
@@ -96,7 +109,7 @@ const HomePage = ({
           </h1>
 
           <p className="mt-[22px] text-[14px] font-medium text-[#59320E] tracking-[0.5px]">
-            원하는 시나리오를 선택해 보세요.
+            원하는 면접 모드를 선택해 보세요.
           </p>
         </section>
 
@@ -108,7 +121,7 @@ const HomePage = ({
             defaultIcon={micBrown}
             activeIcon={micWhite}
             title="기초 - 1분 자기소개 연습"
-            description="첫인상과 핵심 강점 전달 중심으로 진행하세요."
+            description="1개의 자기소개 질문으로 첫인상과 핵심 강점 전달을 연습합니다."
           />
 
           <InterviewCard
@@ -117,7 +130,7 @@ const HomePage = ({
             defaultIcon={personBrown}
             activeIcon={personWhite}
             title="일반 - 공통 질문 면접"
-            description="지원 동기, 장단점, 협업 경험 중심으로 진행하세요."
+            description="자기소개 1개, 후속질문 5개, 마지막 기타 질문 1개로 진행합니다."
           />
 
           <InterviewCard
@@ -126,12 +139,29 @@ const HomePage = ({
             defaultIcon={calendarBrown}
             activeIcon={calendarWhite}
             title="심화 - 꼬리 질문 면접"
-            description="답변 수행을 더 구체적으로 설명하는 연습을 진행하세요."
+            description="자기소개 후 더 깊은 후속질문 5개와 마지막 기타 질문으로 진행합니다."
           />
         </section>
 
+        {/* Selected Mode Info */}
+        <section className="relative z-10 mt-[24px] w-[72%] max-w-[1112px] rounded-[10px] border border-[#E3B58F] bg-white/45 px-[22px] py-[14px]">
+          <p className="text-[13px] leading-[21px] font-medium text-[#735842] text-center">
+            {selectedScenario === "oneMinuteIntro" &&
+              "선택한 모드: 기초 1분 자기소개 · 자기소개 질문 1개로 진행됩니다."}
+
+            {selectedScenario === "common" &&
+              "선택한 모드: COMMON · 자기소개 1개, 후속질문 5개, 기타 인터뷰 질문 1개로 총 7개 질문이 진행됩니다."}
+
+            {selectedScenario === "deep" &&
+              "선택한 모드: ADVANCED · 자기소개 1개, 더 깊은 후속질문 5개, 기타 인터뷰 질문 1개로 총 7개 질문이 진행됩니다."}
+
+            {selectedScenario === null &&
+              "면접 모드를 선택하면 진행 방식이 표시됩니다."}
+          </p>
+        </section>
+
         {/* Start Button */}
-        <section className="relative z-10 mt-[72px] flex flex-col items-center">
+        <section className="relative z-10 mt-[48px] flex flex-col items-center">
           <button
             type="button"
             onClick={handleStartInterview}
@@ -158,7 +188,7 @@ const HomePage = ({
           </p>
 
           <p className="mt-[5px] text-[11px] font-medium text-[#7A5F4A]">
-            시작 시나리오 선택 후 연습을 시작해보세요.
+            면접 모드 선택 후 정보를 입력하고 체크하면 시작할 수 있어요.
           </p>
         </section>
 
@@ -191,7 +221,7 @@ const HomePage = ({
                     : "border-[#CDB7A3] bg-white/65 focus:border-[#B98255] focus:bg-white/80"
                 }
               `}
-              placeholder=""
+              placeholder="지원 회사, 직무, 프로젝트 경험, 강점 등을 입력해보세요."
             />
 
             <button

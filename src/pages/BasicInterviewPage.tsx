@@ -8,61 +8,102 @@ import refreshBrown from "../assets/refresh-brown.svg";
 
 import { postSttAudio } from "../apis/stt";
 import { submitAnswer } from "../apis/answer";
-import { generateQuestion, type InterviewStage } from "../apis/question";
+import {
+  generateQuestion,
+  type InterviewMode,
+  type InterviewStage,
+} from "../apis/question";
 import { getAudioDuration } from "../utils/audio";
+import { playQuestionAudio } from "../utils/playQuestionAudio";
 
 import type { InterviewRecord } from "../App";
 
 type BasicInterviewPageProps = {
   sessionId: number | null;
+  interviewMode: InterviewMode;
   onFinishInterview: (records: InterviewRecord[]) => void;
 };
 
-type InterviewStep = 0 | 1 | 2;
 type LoadingType = "next" | "feedback" | null;
 
-const steps: {
+type QuestionStep = {
   title: string;
-  subtitle: string;
   progressTitle: string;
   stage: InterviewStage;
   fallbackQuestion: string;
-}[] = [
+};
+
+const questionSteps: QuestionStep[] = [
   {
     title: "자기소개",
-    subtitle: "현재 진행",
     progressTitle: "자기소개",
     stage: "INTRO",
     fallbackQuestion: "안녕하세요. 먼저 자기소개를 해주세요.",
   },
   {
-    title: "후속 질문",
-    subtitle: "다음 제공",
-    progressTitle: "후속 질문",
+    title: "후속 질문 1",
+    progressTitle: "후속 질문 1/5",
     stage: "PERSONALITY",
-    fallbackQuestion:
-      "좋습니다. 자기소개 내용을 바탕으로 후속 질문에 답변해 주세요.",
+    fallbackQuestion: "앞선 답변을 바탕으로 조금 더 구체적으로 설명해주세요.",
   },
   {
-    title: "기타 인터뷰 질문",
-    subtitle: "-",
-    progressTitle: "기타 인터뷰 질문",
-    stage: "TECHNICAL",
-    fallbackQuestion: "마지막으로 직무 관련 질문에 답변해 주세요.",
+    title: "후속 질문 2",
+    progressTitle: "후속 질문 2/5",
+    stage: "PERSONALITY",
+    fallbackQuestion: "해당 경험에서 본인의 역할을 더 설명해주세요.",
+  },
+  {
+    title: "후속 질문 3",
+    progressTitle: "후속 질문 3/5",
+    stage: "PERSONALITY",
+    fallbackQuestion: "문제를 해결하는 과정에서 어려웠던 점은 무엇인가요?",
+  },
+  {
+    title: "후속 질문 4",
+    progressTitle: "후속 질문 4/5",
+    stage: "PERSONALITY",
+    fallbackQuestion: "그 경험을 통해 배운 점은 무엇인가요?",
+  },
+  {
+    title: "후속 질문 5",
+    progressTitle: "후속 질문 5/5",
+    stage: "PERSONALITY",
+    fallbackQuestion: "비슷한 상황이 다시 온다면 어떻게 개선하고 싶나요?",
+  },
+  {
+    title: "기타 인터뷰",
+    progressTitle: "기타 인터뷰",
+    stage: "FINAL",
+    fallbackQuestion: "마지막으로 면접에서 더 하고 싶은 말이 있나요?",
   },
 ];
 
+const getBigStepIndex = (questionIndex: number) => {
+  if (questionIndex === 0) return 0;
+  if (questionIndex >= 1 && questionIndex <= 5) return 1;
+  return 2;
+};
+
+const getBigStepSubtitle = (questionIndex: number) => {
+  if (questionIndex === 0) return "현재 진행";
+  if (questionIndex >= 1 && questionIndex <= 5) {
+    return `${questionIndex}/5 진행`;
+  }
+  return "현재 진행";
+};
+
 const BasicInterviewPage = ({
   sessionId,
+  interviewMode,
   onFinishInterview,
 }: BasicInterviewPageProps) => {
-  const [currentStep, setCurrentStep] = useState<InterviewStep>(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuestionLoading, setIsQuestionLoading] = useState(false);
 
   const [myAnswer, setMyAnswer] = useState("");
-  const [aiText, setAiText] = useState(steps[0].fallbackQuestion);
+  const [aiText, setAiText] = useState(questionSteps[0].fallbackQuestion);
 
   const [loadingType, setLoadingType] = useState<LoadingType>(null);
   const [records, setRecords] = useState<InterviewRecord[]>([]);
@@ -75,11 +116,18 @@ const BasicInterviewPage = ({
   const streamRef = useRef<MediaStream | null>(null);
   const latestAnswerRef = useRef("");
 
-  const currentTitle = steps[currentStep].progressTitle;
+  const currentQuestion = questionSteps[currentQuestionIndex];
+  const currentTitle = currentQuestion.progressTitle;
+  const currentBigStep = getBigStepIndex(currentQuestionIndex);
 
   useEffect(() => {
+    setCurrentQuestionIndex(0);
+    setRecords([]);
+    setMyAnswer("");
+    latestAnswerRef.current = "";
+    setAiText(questionSteps[0].fallbackQuestion);
     requestQuestion(0);
-  }, [sessionId]);
+  }, [sessionId, interviewMode]);
 
   useEffect(() => {
     return () => {
@@ -88,11 +136,13 @@ const BasicInterviewPage = ({
   }, []);
 
   const requestQuestion = async (
-    step: InterviewStep,
+    questionIndex: number,
     previousAnswer = ""
   ) => {
+    const targetQuestion = questionSteps[questionIndex];
+
     if (!sessionId) {
-      setAiText(steps[step].fallbackQuestion);
+      setAiText(targetQuestion.fallbackQuestion);
       return;
     }
 
@@ -101,18 +151,24 @@ const BasicInterviewPage = ({
 
       const result = await generateQuestion({
         sessionId,
-        mode: "COMMON",
-        stage: steps[step].stage,
+        mode: interviewMode,
+        stage: targetQuestion.stage,
         previousAnswer,
         userInput: "",
-        questionOrder: step + 1,
+        questionOrder: questionIndex + 1,
       });
 
       console.log("질문 생성 완료:", result);
+
       setAiText(result.question);
+
+      await playQuestionAudio({
+        questionAudioBase64: result.questionAudioBase64,
+        questionAudioContentType: result.questionAudioContentType,
+      });
     } catch (error) {
       console.error(error);
-      setAiText(steps[step].fallbackQuestion);
+      setAiText(targetQuestion.fallbackQuestion);
     } finally {
       setIsQuestionLoading(false);
     }
@@ -128,7 +184,7 @@ const BasicInterviewPage = ({
     if (!answer) return null;
 
     return {
-      stepTitle: steps[currentStep].title,
+      stepTitle: currentQuestion.title,
       aiQuestion: aiText,
       userAnswer: answer,
     };
@@ -153,7 +209,7 @@ const BasicInterviewPage = ({
 
     const result = await submitAnswer({
       sessionId,
-      questionText: aiText || steps[currentStep].fallbackQuestion,
+      questionText: aiText || currentQuestion.fallbackQuestion,
       answerText,
       answerDuration,
     });
@@ -162,7 +218,7 @@ const BasicInterviewPage = ({
   };
 
   const moveToNextStepWithLoading = () => {
-    if (currentStep >= 2) return;
+    if (currentQuestionIndex >= questionSteps.length - 1) return;
 
     const currentRecord = createCurrentRecord();
 
@@ -173,14 +229,17 @@ const BasicInterviewPage = ({
     setLoadingType("next");
 
     setTimeout(async () => {
-      const nextStep = (currentStep + 1) as InterviewStep;
+      const nextQuestionIndex = currentQuestionIndex + 1;
 
-      setCurrentStep(nextStep);
+      setCurrentQuestionIndex(nextQuestionIndex);
       setMyAnswer("");
       latestAnswerRef.current = "";
       setRecordingStartedAt(null);
 
-      await requestQuestion(nextStep, currentRecord?.userAnswer ?? "");
+      await requestQuestion(
+        nextQuestionIndex,
+        currentRecord?.userAnswer ?? ""
+      );
 
       setLoadingType(null);
     }, 1200);
@@ -246,12 +305,12 @@ const BasicInterviewPage = ({
             await submitCurrentAnswer(trimmedText);
           } catch (error) {
             console.warn(
-              "답변 저장 API 실패. 피드백 직접 생성으로 진행합니다.",
+              "답변 저장 API 실패. 화면 진행은 계속합니다.",
               error
             );
           }
 
-          if (currentStep < 2) {
+          if (currentQuestionIndex < questionSteps.length - 1) {
             setTimeout(() => {
               moveToNextStepWithLoading();
             }, 500);
@@ -324,15 +383,12 @@ const BasicInterviewPage = ({
       try {
         await submitCurrentAnswer(trimmedText, duration);
       } catch (error) {
-        console.warn(
-          "답변 저장 API 실패. 피드백 직접 생성으로 진행합니다.",
-          error
-        );
+        console.warn("답변 저장 API 실패. 화면 진행은 계속합니다.", error);
       }
 
       console.log("업로드 파일 답변 처리 완료");
 
-      if (currentStep < 2) {
+      if (currentQuestionIndex < questionSteps.length - 1) {
         setTimeout(() => {
           moveToNextStepWithLoading();
         }, 500);
@@ -405,20 +461,55 @@ const BasicInterviewPage = ({
             </div>
 
             <p className="mt-[10px] text-[13px] font-semibold text-[#9A6A42]">
-              마이크 녹음 또는 오디오 파일 업로드로 답변할 수 있어요.
+              {interviewMode === "COMMON"
+                ? "공통 질문 면접 · 총 7개의 질문으로 진행됩니다."
+                : "심화 꼬리 질문 면접 · 더 깊은 후속질문으로 진행됩니다."}
             </p>
           </section>
 
           <section className="mt-[30px] w-full max-w-[1113px] h-[118px] rounded-[10px] border border-[#FF9029]/50 bg-[#FFDDDD]/60 px-[66px] flex items-center">
-            {steps.map((step, index) => (
-              <StepBlock
-                key={step.title}
-                index={index}
-                currentStep={currentStep}
-                title={step.title}
-                defaultSubtitle={step.subtitle}
-              />
-            ))}
+            <BigStepBlock
+              index={0}
+              currentBigStep={currentBigStep}
+              title="자기소개"
+              subtitle={
+                currentBigStep === 0
+                  ? "현재 진행"
+                  : currentBigStep > 0
+                  ? "완료"
+                  : "대기"
+              }
+            />
+
+            <StepLine isDone={currentBigStep > 0} />
+
+            <BigStepBlock
+              index={1}
+              currentBigStep={currentBigStep}
+              title="후속 질문"
+              subtitle={
+                currentBigStep === 1
+                  ? getBigStepSubtitle(currentQuestionIndex)
+                  : currentBigStep > 1
+                  ? "완료"
+                  : "대기"
+              }
+            />
+
+            <StepLine isDone={currentBigStep > 1} />
+
+            <BigStepBlock
+              index={2}
+              currentBigStep={currentBigStep}
+              title="기타 인터뷰"
+              subtitle={
+                currentBigStep === 2
+                  ? "현재 진행"
+                  : currentBigStep > 2
+                  ? "완료"
+                  : "대기"
+              }
+            />
           </section>
 
           <div className="mt-[34px] w-full max-w-[950px] h-px bg-[#E8DDD4]" />
@@ -496,25 +587,93 @@ const BasicInterviewPage = ({
               buttonText="질문 다시 생성"
               text={isQuestionLoading ? "질문을 생성하고 있습니다." : aiText}
               onButtonClick={() =>
-                requestQuestion(currentStep, getCurrentAnswer())
+                requestQuestion(currentQuestionIndex, getCurrentAnswer())
               }
             />
 
             <AnswerBox
               icon={chatOrange}
               title="나의 답변"
-              buttonText="면접 끝내기"
+              buttonText={
+                currentQuestionIndex === questionSteps.length - 1
+                  ? "면접 끝내기"
+                  : "다음 질문으로"
+              }
               text={
                 myAnswer ||
                 (isSubmitting
                   ? "음성을 텍스트로 변환하고 답변을 처리하고 있습니다."
                   : "마이크로 답변하거나 오디오 파일을 업로드하면 여기에 텍스트로 표시됩니다.")
               }
-              onButtonClick={handleFinishInterview}
+              onButtonClick={
+                currentQuestionIndex === questionSteps.length - 1
+                  ? handleFinishInterview
+                  : moveToNextStepWithLoading
+              }
             />
           </section>
         </div>
       </main>
+    </div>
+  );
+};
+
+const BigStepBlock = ({
+  index,
+  currentBigStep,
+  title,
+  subtitle,
+}: {
+  index: number;
+  currentBigStep: number;
+  title: string;
+  subtitle: string;
+}) => {
+  const isDone = index < currentBigStep;
+  const isCurrent = index === currentBigStep;
+
+  const circleClass = isDone || isCurrent ? "bg-[#FF9029]" : "bg-[#FFC38B]";
+
+  return (
+    <div className="flex items-center gap-[14px] min-w-[190px]">
+      <div
+        className={`w-[44px] h-[44px] rounded-full flex items-center justify-center ${circleClass}`}
+      >
+        {isDone ? (
+          <img
+            src={stepCheckWhite}
+            alt="완료"
+            className="w-[22px] h-[22px] object-contain"
+          />
+        ) : isCurrent ? (
+          <span className="w-[10px] h-[10px] rounded-full bg-white" />
+        ) : null}
+      </div>
+
+      <div>
+        <p className="text-[15px] font-bold text-[#734112]">{title}</p>
+        <p
+          className={`mt-[4px] text-[10px] font-semibold ${
+            isDone || isCurrent ? "text-[#FF9029]" : "text-[#9B7A60]"
+          }`}
+        >
+          {subtitle}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const StepLine = ({ isDone }: { isDone: boolean }) => {
+  return (
+    <div className="flex-1 mx-[18px]">
+      <div className="relative h-[4px] rounded-full bg-[#EAD6C6]">
+        <div
+          className={`absolute left-0 top-0 h-full rounded-full bg-[#FF9029] transition-all duration-300 ${
+            isDone ? "w-full" : "w-0"
+          }`}
+        />
+      </div>
     </div>
   );
 };
@@ -612,68 +771,6 @@ const LoadingBars = () => {
       <span className="loading-bar" style={{ animationDelay: "0.36s" }} />
       <span className="loading-bar" style={{ animationDelay: "0.48s" }} />
     </div>
-  );
-};
-
-const StepBlock = ({
-  index,
-  currentStep,
-  title,
-  defaultSubtitle,
-}: {
-  index: number;
-  currentStep: InterviewStep;
-  title: string;
-  defaultSubtitle: string;
-}) => {
-  const isDone = index < currentStep;
-  const isCurrent = index === currentStep;
-  const isLast = index === steps.length - 1;
-
-  const circleClass = isDone || isCurrent ? "bg-[#FF9029]" : "bg-[#FFC38B]";
-  const subtitle = isDone ? "완료" : isCurrent ? "현재 진행" : defaultSubtitle;
-
-  return (
-    <>
-      <div className="flex items-center gap-[14px] min-w-[190px]">
-        <div
-          className={`w-[44px] h-[44px] rounded-full flex items-center justify-center ${circleClass}`}
-        >
-          {isDone ? (
-            <img
-              src={stepCheckWhite}
-              alt="완료"
-              className="w-[22px] h-[22px] object-contain"
-            />
-          ) : isCurrent ? (
-            <span className="w-[10px] h-[10px] rounded-full bg-white" />
-          ) : null}
-        </div>
-
-        <div>
-          <p className="text-[15px] font-bold text-[#734112]">{title}</p>
-          <p
-            className={`mt-[4px] text-[10px] font-semibold ${
-              isDone || isCurrent ? "text-[#FF9029]" : "text-[#9B7A60]"
-            }`}
-          >
-            {subtitle}
-          </p>
-        </div>
-      </div>
-
-      {!isLast && (
-        <div className="flex-1 mx-[18px]">
-          <div className="relative h-[4px] rounded-full bg-[#EAD6C6]">
-            <div
-              className={`absolute left-0 top-0 h-full rounded-full bg-[#FF9029] transition-all duration-300 ${
-                index < currentStep ? "w-full" : "w-0"
-              }`}
-            />
-          </div>
-        </div>
-      )}
-    </>
   );
 };
 

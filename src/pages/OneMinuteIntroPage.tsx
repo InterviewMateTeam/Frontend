@@ -9,6 +9,7 @@ import { postSttAudio } from "../apis/stt";
 import { submitAnswer } from "../apis/answer";
 import { generateQuestion } from "../apis/question";
 import { getAudioDuration } from "../utils/audio";
+import { playQuestionAudio } from "../utils/playQuestionAudio";
 
 type OneMinuteIntroPageProps = {
   sessionId: number | null;
@@ -90,7 +91,13 @@ const OneMinuteIntroPage = ({
       });
 
       console.log("1분 자기소개 질문 생성 완료:", result);
+
       setQuestionText(result.question);
+
+      await playQuestionAudio({
+        questionAudioBase64: result.questionAudioBase64,
+        questionAudioContentType: result.questionAudioContentType,
+      });
     } catch (error) {
       console.error(error);
       setQuestionText("1분 자기소개를 해주세요.");
