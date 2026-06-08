@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-import mainBg from "../assets/main-bg.svg";
 import playButton from "../assets/play-button.svg";
 
 import micBrown from "../assets/mic-brown.svg";
@@ -75,7 +74,7 @@ const HomePage = ({
   return (
     <div className="w-screen min-h-screen bg-[#FFF9F3] overflow-x-hidden">
       {/* Header */}
-      <header className="w-full h-[57px] bg-[#FFF9F3] border-b border-[#EAD8C8] flex items-center justify-center">
+      <header className="relative z-20 w-full h-[57px] bg-[#FFF9F3]/90 border-b border-[#EAD8C8] flex items-center justify-center">
         <nav className="flex items-center gap-[170px] text-[#3F2A1A] text-[17px] font-bold">
           <button
             type="button"
@@ -94,15 +93,7 @@ const HomePage = ({
       </header>
 
       {/* Main */}
-      <main className="relative w-full min-h-[calc(100vh-57px)] flex flex-col items-center overflow-hidden">
-        {/* Background */}
-        <img
-          src={mainBg}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-        />
-
-        {/* Title */}
+      <main className="relative w-full min-h-[calc(100vh-57px)] flex flex-col items-center overflow-hidden">        {/* Title */}
         <section className="relative z-10 mt-[55px] text-center">
           <h1 className="text-[48px] leading-none font-semibold tracking-[-1.5px] text-[#1F1712]">
             Interview<span className="text-[#F58220]">Mate</span>
@@ -144,7 +135,7 @@ const HomePage = ({
         </section>
 
         {/* Selected Mode Info */}
-        <section className="relative z-10 mt-[24px] w-[72%] max-w-[1112px] rounded-[10px] border border-[#E3B58F] bg-white/45 px-[22px] py-[14px]">
+        <section className="relative z-10 mt-[24px] w-[72%] max-w-[1112px] rounded-[10px] border border-[#E3B58F] bg-white/45 px-[22px] py-[14px] shadow-[0_4px_18px_rgba(89,50,14,0.04)]">
           <p className="text-[13px] leading-[21px] font-medium text-[#735842] text-center">
             {selectedScenario === "oneMinuteIntro" &&
               "선택한 모드: 기초 1분 자기소개 · 자기소개 질문 1개로 진행됩니다."}

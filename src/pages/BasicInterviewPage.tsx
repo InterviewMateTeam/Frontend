@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-import mainBg from "../assets/main-bg.svg";
-import micWhite from "../assets/mic-white.svg";
 import stepCheckWhite from "../assets/check.svg";
 import chatOrange from "../assets/chat-orange.svg";
 import refreshBrown from "../assets/refresh-brown.svg";
@@ -119,12 +117,14 @@ const BasicInterviewPage = ({
   const currentQuestion = questionSteps[currentQuestionIndex];
   const currentTitle = currentQuestion.progressTitle;
   const currentBigStep = getBigStepIndex(currentQuestionIndex);
+  const isLastQuestion = currentQuestionIndex === questionSteps.length - 1;
 
   useEffect(() => {
     setCurrentQuestionIndex(0);
     setRecords([]);
     setMyAnswer("");
     latestAnswerRef.current = "";
+    setRecordingStartedAt(null);
     setAiText(questionSteps[0].fallbackQuestion);
     requestQuestion(0);
   }, [sessionId, interviewMode]);
@@ -178,8 +178,8 @@ const BasicInterviewPage = ({
     return latestAnswerRef.current.trim() || myAnswer.trim();
   };
 
-  const createCurrentRecord = (): InterviewRecord | null => {
-    const answer = getCurrentAnswer();
+  const createCurrentRecord = (answerOverride?: string): InterviewRecord | null => {
+    const answer = (answerOverride ?? getCurrentAnswer()).trim();
 
     if (!answer) return null;
 
@@ -217,15 +217,36 @@ const BasicInterviewPage = ({
     console.log("답변 제출 완료:", result);
   };
 
-  const moveToNextStepWithLoading = () => {
-    if (currentQuestionIndex >= questionSteps.length - 1) return;
+  const finishInterviewWithAnswer = (answerText?: string) => {
+    const currentRecord = createCurrentRecord(answerText);
 
-    const currentRecord = createCurrentRecord();
+    const finalRecords = currentRecord
+      ? [...records, currentRecord]
+      : records;
 
-    if (currentRecord) {
-      setRecords((prev) => [...prev, currentRecord]);
+    if (finalRecords.length === 0) {
+      alert("먼저 답변을 녹음하거나 오디오 파일을 업로드해주세요.");
+      return;
     }
 
+    setLoadingType("feedback");
+
+    setTimeout(() => {
+      onFinishInterview(finalRecords);
+    }, 1300);
+  };
+
+  const moveToNextStepWithLoading = (answerOverride?: string) => {
+    if (currentQuestionIndex >= questionSteps.length - 1) return;
+
+    const currentRecord = createCurrentRecord(answerOverride);
+
+    if (!currentRecord) {
+      alert("먼저 답변을 녹음하거나 오디오 파일을 업로드해주세요.");
+      return;
+    }
+
+    setRecords((prev) => [...prev, currentRecord]);
     setLoadingType("next");
 
     setTimeout(async () => {
@@ -236,17 +257,43 @@ const BasicInterviewPage = ({
       latestAnswerRef.current = "";
       setRecordingStartedAt(null);
 
-      await requestQuestion(
-        nextQuestionIndex,
-        currentRecord?.userAnswer ?? ""
-      );
+      await requestQuestion(nextQuestionIndex, currentRecord.userAnswer);
 
       setLoadingType(null);
     }, 1200);
   };
 
+  const processAnswerText = async (answerText: string, duration?: number) => {
+    const trimmedText = answerText.trim();
+
+    if (!trimmedText) {
+      alert("음성이 잘 인식되지 않았어요. 다시 말해보세요.");
+      return;
+    }
+
+    setMyAnswer(trimmedText);
+    latestAnswerRef.current = trimmedText;
+
+    try {
+      await submitCurrentAnswer(trimmedText, duration);
+    } catch (error) {
+      console.warn("답변 저장 API 실패. 화면 진행은 계속합니다.", error);
+    }
+
+    if (isLastQuestion) {
+      setTimeout(() => {
+        finishInterviewWithAnswer(trimmedText);
+      }, 500);
+      return;
+    }
+
+    setTimeout(() => {
+      moveToNextStepWithLoading(trimmedText);
+    }, 500);
+  };
+
   const handleStartRecording = async () => {
-    if (loadingType || isSubmitting || isQuestionLoading) return;
+    if (loadingType || isSubmitting || isQuestionLoading || isRecording) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -291,30 +338,7 @@ const BasicInterviewPage = ({
           setIsSubmitting(true);
 
           const text = await postSttAudio(audioBlob);
-          const trimmedText = text.trim();
-
-          if (!trimmedText) {
-            alert("음성이 잘 인식되지 않았어요. 다시 말해보세요.");
-            return;
-          }
-
-          setMyAnswer(trimmedText);
-          latestAnswerRef.current = trimmedText;
-
-          try {
-            await submitCurrentAnswer(trimmedText);
-          } catch (error) {
-            console.warn(
-              "답변 저장 API 실패. 화면 진행은 계속합니다.",
-              error
-            );
-          }
-
-          if (currentQuestionIndex < questionSteps.length - 1) {
-            setTimeout(() => {
-              moveToNextStepWithLoading();
-            }, 500);
-          }
+          await processAnswerText(text);
         } catch (error) {
           console.error(error);
           alert("음성 변환 중 오류가 발생했어요.");
@@ -358,7 +382,7 @@ const BasicInterviewPage = ({
 
     if (!file) return;
 
-    if (loadingType || isSubmitting || isQuestionLoading) return;
+    if (loadingType || isSubmitting || isQuestionLoading || isRecording) return;
 
     if (!file.type.startsWith("audio/")) {
       alert("오디오 파일만 업로드할 수 있어요.");
@@ -370,29 +394,10 @@ const BasicInterviewPage = ({
 
       const duration = await getAudioDuration(file);
       const text = await postSttAudio(file);
-      const trimmedText = text.trim();
 
-      if (!trimmedText) {
-        alert("음성이 잘 인식되지 않았어요. 다른 파일로 다시 시도해주세요.");
-        return;
-      }
-
-      setMyAnswer(trimmedText);
-      latestAnswerRef.current = trimmedText;
-
-      try {
-        await submitCurrentAnswer(trimmedText, duration);
-      } catch (error) {
-        console.warn("답변 저장 API 실패. 화면 진행은 계속합니다.", error);
-      }
+      await processAnswerText(text, duration);
 
       console.log("업로드 파일 답변 처리 완료");
-
-      if (currentQuestionIndex < questionSteps.length - 1) {
-        setTimeout(() => {
-          moveToNextStepWithLoading();
-        }, 500);
-      }
     } catch (error) {
       console.error(error);
       alert("오디오 파일 변환 중 오류가 발생했어요.");
@@ -419,22 +424,7 @@ const BasicInterviewPage = ({
       return;
     }
 
-    const currentRecord = createCurrentRecord();
-
-    const finalRecords = currentRecord
-      ? [...records, currentRecord]
-      : records;
-
-    if (finalRecords.length === 0) {
-      alert("먼저 답변을 녹음하거나 오디오 파일을 업로드해주세요.");
-      return;
-    }
-
-    setLoadingType("feedback");
-
-    setTimeout(() => {
-      onFinishInterview(finalRecords);
-    }, 1300);
+    finishInterviewWithAnswer();
   };
 
   if (loadingType) {
@@ -443,14 +433,8 @@ const BasicInterviewPage = ({
 
   return (
     <div className="relative w-screen min-h-screen bg-[#FFF9F3] overflow-x-hidden">
-      <img
-        src={mainBg}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-      />
-
       <main className="relative z-10 w-full min-h-screen flex justify-center px-[40px] py-[56px]">
-        <div className="w-full max-w-[1280px] min-h-[calc(100vh-112px)] rounded-[2px] bg-white/10 flex flex-col items-center">
+        <div className="w-full max-w-[1280px] min-h-[calc(100vh-112px)] rounded-[2px] bg-transparent flex flex-col items-center">
           <section className="text-center">
             <div className="flex items-center justify-center gap-[8px]">
               <span className="w-[12px] h-[12px] rounded-full bg-[#FF9029]" />
@@ -467,7 +451,7 @@ const BasicInterviewPage = ({
             </p>
           </section>
 
-          <section className="mt-[30px] w-full max-w-[1113px] h-[118px] rounded-[10px] border border-[#FF9029]/50 bg-[#FFDDDD]/60 px-[66px] flex items-center">
+          <section className="mt-[30px] w-full max-w-[1113px] rounded-[12px] border border-[#F1BE8B] bg-[#FFF8F1] px-[66px] py-[24px] shadow-[0_6px_18px_rgba(115,65,18,0.04)] flex items-center">
             <BigStepBlock
               index={0}
               currentBigStep={currentBigStep}
@@ -512,7 +496,7 @@ const BasicInterviewPage = ({
             />
           </section>
 
-          <div className="mt-[34px] w-full max-w-[950px] h-px bg-[#E8DDD4]" />
+          <div className="mt-[28px] w-full max-w-[950px] h-px bg-[#E8DDD4]" />
 
           <StatusBadge
             isRecording={isRecording}
@@ -520,35 +504,82 @@ const BasicInterviewPage = ({
             isQuestionLoading={isQuestionLoading}
           />
 
-          <section className="mt-[22px] flex flex-col items-center">
-            <button
-              type="button"
-              onClick={handleMicClick}
-              disabled={isSubmitting || isQuestionLoading}
-              className={`
-                relative w-[112px] h-[112px] rounded-full bg-[#FF9029]
-                flex items-center justify-center
-                shadow-[0_0_0_12px_rgba(255,144,41,0.18),0_0_0_24px_rgba(255,144,41,0.08)]
-                transition active:scale-95
-                ${
-                  isSubmitting || isQuestionLoading
-                    ? "opacity-70 cursor-default"
-                    : isRecording
-                    ? "scale-105 animate-pulse cursor-pointer"
-                    : "hover:scale-105 cursor-pointer"
-                }
-              `}
-            >
-              <img
-                src={micWhite}
-                alt="마이크"
-                className="w-[46px] h-[46px] object-contain"
-              />
-            </button>
+          <section className="mt-[18px] flex flex-col items-center">
+            <div className="relative flex items-center justify-center w-[380px] h-[172px] overflow-visible">
+              {isRecording && (
+                <>
+                  <div className="absolute left-[8px] top-1/2 -translate-y-1/2 flex items-center gap-[7px]">
+                    {[54, 82, 104, 74, 48, 36, 68, 92].map(
+                      (height, index) => (
+                        <span
+                          key={`left-${index}`}
+                          className="voice-wave-bar rounded-full bg-[#F7DEC1]"
+                          style={{
+                            width: "10px",
+                            height: `${height}px`,
+                            animationDelay: `${index * 0.08}s`,
+                          }}
+                        />
+                      )
+                    )}
+                  </div>
+
+                  <div className="absolute right-[8px] top-1/2 -translate-y-1/2 flex items-center gap-[7px]">
+                    {[92, 68, 36, 48, 74, 104, 82, 54].map(
+                      (height, index) => (
+                        <span
+                          key={`right-${index}`}
+                          className="voice-wave-bar rounded-full bg-[#F7DEC1]"
+                          style={{
+                            width: "10px",
+                            height: `${height}px`,
+                            animationDelay: `${index * 0.08}s`,
+                          }}
+                        />
+                      )
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div className="absolute w-[132px] h-[132px] rounded-full bg-[#FFDAB8]/45" />
+
+              {isRecording && (
+                <>
+                  <div className="absolute w-[150px] h-[150px] rounded-full bg-[#FFE1C4]/45 mic-ring-pulse" />
+                  <div className="absolute w-[122px] h-[122px] rounded-full bg-[#FFD0A1]/35 mic-ring-pulse-delayed" />
+                </>
+              )}
+
+              <div className="absolute w-[110px] h-[110px] rounded-full bg-[#FFF0E1]" />
+
+              <button
+                type="button"
+                onClick={handleMicClick}
+                disabled={isSubmitting || isQuestionLoading}
+                className={`
+                  relative z-10 w-[86px] h-[86px] rounded-full border-none outline-none
+                  flex items-center justify-center
+                  transition-transform duration-200
+                  ${
+                    isRecording
+                      ? "bg-[#FF962E] scale-105 shadow-[0_0_0_8px_rgba(255,150,46,0.12),0_10px_24px_rgba(255,150,46,0.28)]"
+                      : "bg-[#FF962E] hover:scale-105 shadow-[0_8px_22px_rgba(255,150,46,0.22)]"
+                  }
+                  ${
+                    isSubmitting || isQuestionLoading
+                      ? "opacity-70 cursor-not-allowed"
+                      : "cursor-pointer"
+                  }
+                `}
+              >
+                <MicIcon />
+              </button>
+            </div>
 
             <label
               className={`
-                mt-[14px] h-[34px] px-[18px] rounded-full border border-[#FF9029]/60
+                mt-[6px] h-[34px] px-[18px] rounded-full border border-[#FF9029]/60
                 bg-white/80 text-[#FF9029] text-[12px] font-bold
                 flex items-center justify-center cursor-pointer
                 hover:bg-[#FFF0E2] transition
@@ -568,23 +599,33 @@ const BasicInterviewPage = ({
               />
             </label>
 
-            <p className="mt-[20px] text-[18px] font-bold text-[#734112]">
+            <p className="mt-[16px] text-[18px] font-bold text-[#734112]">
               {isQuestionLoading
                 ? "질문 생성 중"
                 : isSubmitting
                 ? "변환 및 제출 중"
                 : isRecording
-                ? "다 말했으면 마이크를 한 번 더 눌러 종료"
+                ? "녹음 중"
                 : "답하여 말하기"}
+            </p>
+
+            <p className="mt-[8px] text-[12px] font-medium text-[#A07A59]">
+              {isQuestionLoading
+                ? "AI가 다음 질문을 준비하고 있어요."
+                : isSubmitting
+                ? "음성을 텍스트로 변환하고 답변을 처리하고 있어요."
+                : isRecording
+                ? "답변을 마쳤다면 마이크를 한 번 더 눌러 종료하세요."
+                : "마이크를 누르면 녹음이 시작됩니다."}
             </p>
           </section>
 
-          <section className="mt-[34px] mb-[72px] w-full max-w-[1113px] grid grid-cols-2 gap-[42px]">
+          <section className="mt-[28px] mb-[72px] w-full max-w-[1113px] grid grid-cols-2 gap-[42px]">
             <AnswerBox
               icon={chatOrange}
               refreshIcon={refreshBrown}
               title="AI 인터뷰어"
-              buttonText="질문 다시 생성"
+              buttonText="질문 다시 듣기"
               text={isQuestionLoading ? "질문을 생성하고 있습니다." : aiText}
               onButtonClick={() =>
                 requestQuestion(currentQuestionIndex, getCurrentAnswer())
@@ -594,11 +635,7 @@ const BasicInterviewPage = ({
             <AnswerBox
               icon={chatOrange}
               title="나의 답변"
-              buttonText={
-                currentQuestionIndex === questionSteps.length - 1
-                  ? "면접 끝내기"
-                  : "다음 질문으로"
-              }
+              buttonText={isLastQuestion ? "면접 끝내기" : "다음 질문으로"}
               text={
                 myAnswer ||
                 (isSubmitting
@@ -606,15 +643,107 @@ const BasicInterviewPage = ({
                   : "마이크로 답변하거나 오디오 파일을 업로드하면 여기에 텍스트로 표시됩니다.")
               }
               onButtonClick={
-                currentQuestionIndex === questionSteps.length - 1
-                  ? handleFinishInterview
-                  : moveToNextStepWithLoading
+                isLastQuestion ? handleFinishInterview : () => moveToNextStepWithLoading()
               }
             />
           </section>
         </div>
       </main>
+
+      <style>
+        {`
+          @keyframes voiceWave {
+            0% {
+              transform: scaleY(0.52);
+              opacity: 0.45;
+            }
+            35% {
+              transform: scaleY(1.08);
+              opacity: 0.95;
+            }
+            70% {
+              transform: scaleY(0.72);
+              opacity: 0.65;
+            }
+            100% {
+              transform: scaleY(0.5);
+              opacity: 0.42;
+            }
+          }
+
+          .voice-wave-bar {
+            transform-origin: center;
+            animation-name: voiceWave;
+            animation-duration: 0.95s;
+            animation-timing-function: ease-in-out;
+            animation-iteration-count: infinite;
+          }
+
+          @keyframes micRingPulse {
+            0% {
+              transform: scale(0.92);
+              opacity: 0.48;
+            }
+            50% {
+              transform: scale(1.08);
+              opacity: 0.18;
+            }
+            100% {
+              transform: scale(0.92);
+              opacity: 0.48;
+            }
+          }
+
+          .mic-ring-pulse {
+            animation: micRingPulse 1.45s ease-in-out infinite;
+          }
+
+          .mic-ring-pulse-delayed {
+            animation: micRingPulse 1.45s ease-in-out infinite;
+            animation-delay: 0.3s;
+          }
+        `}
+      </style>
     </div>
+  );
+};
+
+const MicIcon = () => {
+  return (
+    <svg
+      width="34"
+      height="34"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 14.5C10.34 14.5 9 13.16 9 11.5V6.5C9 4.84 10.34 3.5 12 3.5C13.66 3.5 15 4.84 15 6.5V11.5C15 13.16 13.66 14.5 12 14.5Z"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.8 10.5V11.4C6.8 14.27 9.13 16.6 12 16.6C14.87 16.6 17.2 14.27 17.2 11.4V10.5"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 16.6V20.2"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.2 20.2H14.8"
+        stroke="white"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 };
 
@@ -632,7 +761,7 @@ const BigStepBlock = ({
   const isDone = index < currentBigStep;
   const isCurrent = index === currentBigStep;
 
-  const circleClass = isDone || isCurrent ? "bg-[#FF9029]" : "bg-[#FFC38B]";
+  const circleClass = isDone || isCurrent ? "bg-[#FF962E]" : "bg-[#F6C78F]";
 
   return (
     <div className="flex items-center gap-[14px] min-w-[190px]">
@@ -654,7 +783,7 @@ const BigStepBlock = ({
         <p className="text-[15px] font-bold text-[#734112]">{title}</p>
         <p
           className={`mt-[4px] text-[10px] font-semibold ${
-            isDone || isCurrent ? "text-[#FF9029]" : "text-[#9B7A60]"
+            isDone || isCurrent ? "text-[#FF962E]" : "text-[#B78B66]"
           }`}
         >
           {subtitle}
@@ -667,9 +796,9 @@ const BigStepBlock = ({
 const StepLine = ({ isDone }: { isDone: boolean }) => {
   return (
     <div className="flex-1 mx-[18px]">
-      <div className="relative h-[4px] rounded-full bg-[#EAD6C6]">
+      <div className="relative h-[4px] rounded-full bg-[#E9D3BC]">
         <div
-          className={`absolute left-0 top-0 h-full rounded-full bg-[#FF9029] transition-all duration-300 ${
+          className={`absolute left-0 top-0 h-full rounded-full bg-[#FF962E] transition-all duration-300 ${
             isDone ? "w-full" : "w-0"
           }`}
         />
@@ -731,7 +860,7 @@ const StatusBadge = ({
           : isSubmitting
           ? "음성을 텍스트로 변환하고 답변을 처리 중입니다"
           : isRecording
-          ? "녹음 중 · 말을 마쳤다면 마이크를 한 번 더 눌러 종료하세요"
+          ? "녹음 중 · 답변을 마쳤다면 마이크를 한 번 더 눌러 종료하세요"
           : "면접 진행 중 · 마이크 녹음 또는 파일 업로드가 가능합니다"}
       </p>
     </div>

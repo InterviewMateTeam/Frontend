@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
-import mainBg from "../assets/main-bg.svg";
+import stepCheckWhite from "../assets/check.svg";
+
 import type { InterviewRecord } from "../App";
 import type { FeedbackResponse } from "../apis/feedback";
 
@@ -82,12 +83,6 @@ const FeedbackPage = ({
 
   return (
     <div className="relative w-screen min-h-screen bg-[#FFF9F3] overflow-x-hidden">
-      <img
-        src={mainBg}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-      />
-
       <main className="relative z-10 w-full min-h-screen flex justify-center px-[40px] py-[28px]">
         <div className="w-full max-w-[1120px] flex flex-col items-center">
           <FeedbackHeader />
@@ -104,7 +99,7 @@ const FeedbackPage = ({
             <button
               type="button"
               onClick={onGoHome}
-              className="h-[36px] px-[18px] rounded-[6px] border border-[#D6BDA5] bg-white/75 text-[#734112] text-[14px] font-bold hover:bg-[#FFF7EF]"
+              className="h-[36px] px-[18px] rounded-[7px] border border-[#D6BDA5] bg-white/80 text-[#734112] text-[14px] font-bold hover:bg-[#FFF7EF] transition"
             >
               ← 메인 화면으로
             </button>
@@ -113,7 +108,7 @@ const FeedbackPage = ({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="h-[36px] px-[18px] rounded-[6px] border border-[#FF9029] bg-white/75 text-[#FF9029] text-[14px] font-bold hover:bg-[#FFF0E2]"
+                className="h-[36px] px-[18px] rounded-[7px] border border-[#FF9029] bg-white/80 text-[#FF9029] text-[14px] font-bold hover:bg-[#FFF0E2] transition"
               >
                 면접 텍스트 전문 보기
               </button>
@@ -121,7 +116,7 @@ const FeedbackPage = ({
               <button
                 type="button"
                 onClick={onRetry}
-                className="h-[36px] px-[20px] rounded-[6px] border-none bg-[#FF9029] text-white text-[14px] font-bold hover:bg-[#F07F18]"
+                className="h-[36px] px-[20px] rounded-[7px] border-none bg-[#FF9029] text-white text-[14px] font-bold hover:bg-[#F07F18] transition"
               >
                 다시 면접보기 →
               </button>
@@ -160,7 +155,7 @@ const FeedbackHeader = () => {
 
 const StepBar = () => {
   return (
-    <section className="mt-[26px] w-full h-[68px] rounded-[10px] border border-[#FF9029]/45 bg-[#FFE9D5]/80 px-[64px] flex items-center justify-between">
+    <section className="mt-[26px] w-full h-[68px] rounded-[12px] border border-[#F1BE8B] bg-[#FFF8F1] px-[64px] flex items-center justify-between shadow-[0_6px_18px_rgba(115,65,18,0.04)]">
       <StepItem title="준비하기" />
       <StepDivider />
       <StepItem title="인터뷰 진행" />
@@ -173,8 +168,12 @@ const StepBar = () => {
 const StepItem = ({ title }: { title: string }) => {
   return (
     <div className="flex items-center gap-[12px]">
-      <div className="w-[38px] h-[38px] rounded-full bg-[#FF9029] flex items-center justify-center shrink-0">
-        <span className="text-white text-[18px] font-bold">✓</span>
+      <div className="w-[38px] h-[38px] rounded-full bg-[#FF962E] flex items-center justify-center shrink-0">
+        <img
+          src={stepCheckWhite}
+          alt="완료"
+          className="w-[20px] h-[20px] object-contain"
+        />
       </div>
 
       <p className="text-[16px] font-bold text-[#4A2A12] whitespace-nowrap">
@@ -185,12 +184,12 @@ const StepItem = ({ title }: { title: string }) => {
 };
 
 const StepDivider = () => {
-  return <div className="w-px h-[38px] bg-[#DDBE9F]" />;
+  return <div className="w-px h-[38px] bg-[#E9D3BC]" />;
 };
 
 const SummarySection = ({ feedback }: { feedback: FeedbackResponse }) => {
   return (
-    <section className="mt-[16px] w-full rounded-[14px] border border-[#FF9029]/45 bg-white/75 shadow-[0_8px_24px_rgba(115,65,18,0.08)] px-[40px] py-[28px] grid grid-cols-[180px_1fr_280px] gap-[34px] items-center">
+    <section className="mt-[16px] w-full rounded-[14px] border border-[#F1BE8B] bg-white/80 shadow-[0_8px_24px_rgba(115,65,18,0.07)] px-[40px] py-[28px] grid grid-cols-[180px_1fr_280px] gap-[34px] items-center">
       <TotalScore score={feedback.totalScore} />
 
       <MainFeedback
@@ -285,7 +284,7 @@ const SummaryBox = ({
   summary: FeedbackResponse["summary"];
 }) => {
   return (
-    <div className="rounded-[14px] border border-[#FF9029]/45 bg-[#FFF7EF] px-[20px] py-[16px]">
+    <div className="rounded-[14px] border border-[#F1BE8B] bg-[#FFF8F1] px-[20px] py-[16px]">
       <p className="text-[17px] font-bold text-[#734112]">평가 요약</p>
 
       <div className="mt-[12px] flex flex-col gap-[8px]">
@@ -293,33 +292,40 @@ const SummaryBox = ({
         <SummaryRow label="내용 구성" value={summary.structure} />
         <SummaryRow label="자신감" value={summary.confidence} />
         <SummaryRow label="시간 관리" value={summary.timeManagement} />
-        <SummaryRow
-          label="논리성"
-          value={summary.logic}
-          warning={summary.logic !== "우수"}
-        />
+        <SummaryRow label="논리성" value={summary.logic} />
       </div>
     </div>
   );
 };
 
-const SummaryRow = ({
-  label,
-  value,
-  warning = false,
-}: {
-  label: string;
-  value: string;
-  warning?: boolean;
-}) => {
+const getSummaryValueClassName = (value: string) => {
+  if (value === "우수") {
+    return "bg-[#EAF8EA] text-[#3E9B4F] border-[#9DD89C]";
+  }
+
+  if (value === "보통") {
+    return "bg-[#FFF4E5] text-[#D4862F] border-[#F2C27B]";
+  }
+
+  if (value === "부족") {
+    return "bg-[#FFECEC] text-[#E05252] border-[#F2A0A0]";
+  }
+
+  return "bg-[#F7EFE8] text-[#734112] border-[#E3C8B0]";
+};
+
+const SummaryRow = ({ label, value }: { label: string; value: string }) => {
   return (
     <div className="flex items-center justify-between text-[13px]">
       <span className="text-[#734112] font-medium">◎ {label}</span>
 
       <span
-        className={`font-semibold ${
-          warning ? "text-[#D99A4D]" : "text-[#5CA55C]"
-        }`}
+        className={`
+          min-w-[46px] h-[22px] px-[9px] rounded-full border
+          flex items-center justify-center
+          text-[12px] font-bold
+          ${getSummaryValueClassName(value)}
+        `}
       >
         {value}
       </span>
@@ -386,7 +392,7 @@ const ScoreCard = ({
   const safeScore = Math.max(0, Math.min(100, score));
 
   return (
-    <div className="min-h-[154px] rounded-[12px] border border-[#FF9029]/45 bg-white/78 px-[18px] py-[16px] flex flex-col justify-between">
+    <div className="min-h-[154px] rounded-[12px] border border-[#F1BE8B] bg-white/80 px-[18px] py-[16px] flex flex-col justify-between shadow-[0_4px_14px_rgba(115,65,18,0.04)]">
       <div>
         <p className="text-[14px] font-bold text-[#FF9029]">{title}</p>
 
@@ -432,12 +438,13 @@ const FeedbackListBox = ({
   title: string;
   items: string[];
 }) => {
-  const borderColor = type === "good" ? "border-[#7DBE7A]" : "border-[#FF9A9A]";
+  const styles =
+    type === "good"
+      ? "border-[#9DD89C] bg-[#FBFFFA]"
+      : "border-[#F2A0A0] bg-[#FFFCFC]";
 
   return (
-    <div
-      className={`min-h-[150px] rounded-[12px] border ${borderColor} bg-white/80 px-[28px] py-[22px]`}
-    >
+    <div className={`min-h-[150px] rounded-[12px] border ${styles} px-[28px] py-[22px]`}>
       <p className="text-[17px] font-bold text-[#734112]">{title}</p>
 
       <ul className="mt-[16px] text-[14px] leading-[25px] text-[#6B5A4A] list-disc pl-[18px] break-keep">
