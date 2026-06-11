@@ -121,7 +121,7 @@ const HomePage = ({
             defaultIcon={personBrown}
             activeIcon={personWhite}
             title="일반 - 공통 질문 면접"
-            description="자기소개 1개, 후속질문 5개, 마지막 기타 질문 1개로 진행합니다."
+            description="자기소개 1개, 후속질문 2개, 마지막 질문 1개로 진행합니다."
           />
 
           <InterviewCard
@@ -130,7 +130,7 @@ const HomePage = ({
             defaultIcon={calendarBrown}
             activeIcon={calendarWhite}
             title="심화 - 꼬리 질문 면접"
-            description="자기소개 후 더 깊은 후속질문 5개와 마지막 기타 질문으로 진행합니다."
+            description="자기소개 후 더 깊은 후속질문 2개와 마지막 질문으로 진행합니다."
           />
         </section>
 
@@ -141,10 +141,10 @@ const HomePage = ({
               "선택한 모드: 기초 1분 자기소개 · 자기소개 질문 1개로 진행됩니다."}
 
             {selectedScenario === "common" &&
-              "선택한 모드: COMMON · 자기소개 1개, 후속질문 5개, 기타 인터뷰 질문 1개로 총 7개 질문이 진행됩니다."}
+              "선택한 모드: COMMON · 자기소개 1개, 후속질문 2개, 마지막 질문 1개로 총 4개 질문이 진행됩니다."}
 
             {selectedScenario === "deep" &&
-              "선택한 모드: ADVANCED · 자기소개 1개, 더 깊은 후속질문 5개, 기타 인터뷰 질문 1개로 총 7개 질문이 진행됩니다."}
+              "선택한 모드: ADVANCED · 자기소개 1개, 더 깊은 후속질문 2개, 마지막 질문 1개로 총 4개 질문이 진행됩니다."}
 
             {selectedScenario === null &&
               "면접 모드를 선택하면 진행 방식이 표시됩니다."}

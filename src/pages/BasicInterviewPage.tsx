@@ -40,37 +40,19 @@ const questionSteps: QuestionStep[] = [
   },
   {
     title: "후속 질문 1",
-    progressTitle: "후속 질문 1/5",
+    progressTitle: "후속 질문 1/2",
     stage: "PERSONALITY",
-    fallbackQuestion: "앞선 답변을 바탕으로 조금 더 구체적으로 설명해주세요.",
+    fallbackQuestion: "앞선 자기소개를 바탕으로 가장 강조하고 싶은 경험을 설명해주세요.",
   },
   {
     title: "후속 질문 2",
-    progressTitle: "후속 질문 2/5",
+    progressTitle: "후속 질문 2/2",
     stage: "PERSONALITY",
-    fallbackQuestion: "해당 경험에서 본인의 역할을 더 설명해주세요.",
+    fallbackQuestion: "그 경험을 통해 배운 점과 지원 직무에 어떻게 연결되는지 설명해주세요.",
   },
   {
-    title: "후속 질문 3",
-    progressTitle: "후속 질문 3/5",
-    stage: "PERSONALITY",
-    fallbackQuestion: "문제를 해결하는 과정에서 어려웠던 점은 무엇인가요?",
-  },
-  {
-    title: "후속 질문 4",
-    progressTitle: "후속 질문 4/5",
-    stage: "PERSONALITY",
-    fallbackQuestion: "그 경험을 통해 배운 점은 무엇인가요?",
-  },
-  {
-    title: "후속 질문 5",
-    progressTitle: "후속 질문 5/5",
-    stage: "PERSONALITY",
-    fallbackQuestion: "비슷한 상황이 다시 온다면 어떻게 개선하고 싶나요?",
-  },
-  {
-    title: "기타 인터뷰",
-    progressTitle: "기타 인터뷰",
+    title: "마지막 질문",
+    progressTitle: "마지막 질문",
     stage: "FINAL",
     fallbackQuestion: "마지막으로 면접에서 더 하고 싶은 말이 있나요?",
   },
@@ -78,15 +60,17 @@ const questionSteps: QuestionStep[] = [
 
 const getBigStepIndex = (questionIndex: number) => {
   if (questionIndex === 0) return 0;
-  if (questionIndex >= 1 && questionIndex <= 5) return 1;
+  if (questionIndex >= 1 && questionIndex <= 2) return 1;
   return 2;
 };
 
 const getBigStepSubtitle = (questionIndex: number) => {
   if (questionIndex === 0) return "현재 진행";
-  if (questionIndex >= 1 && questionIndex <= 5) {
-    return `${questionIndex}/5 진행`;
+
+  if (questionIndex >= 1 && questionIndex <= 2) {
+    return `${questionIndex}/2 진행`;
   }
+
   return "현재 진행";
 };
 
@@ -160,7 +144,7 @@ const BasicInterviewPage = ({
 
       console.log("질문 생성 완료:", result);
 
-      setAiText(result.question);
+      setAiText(result.question || targetQuestion.fallbackQuestion);
 
       await playQuestionAudio({
         questionAudioBase64: result.questionAudioBase64,
@@ -178,7 +162,9 @@ const BasicInterviewPage = ({
     return latestAnswerRef.current.trim() || myAnswer.trim();
   };
 
-  const createCurrentRecord = (answerOverride?: string): InterviewRecord | null => {
+  const createCurrentRecord = (
+    answerOverride?: string
+  ): InterviewRecord | null => {
     const answer = (answerOverride ?? getCurrentAnswer()).trim();
 
     if (!answer) return null;
@@ -446,8 +432,8 @@ const BasicInterviewPage = ({
 
             <p className="mt-[10px] text-[13px] font-semibold text-[#9A6A42]">
               {interviewMode === "COMMON"
-                ? "공통 질문 면접 · 총 7개의 질문으로 진행됩니다."
-                : "심화 꼬리 질문 면접 · 더 깊은 후속질문으로 진행됩니다."}
+                ? "공통 질문 면접 · 자기소개, 후속 질문 2개, 마지막 질문으로 진행됩니다."
+                : "심화 꼬리 질문 면접 · 자기소개, 심화 후속 질문 2개, 마지막 질문으로 진행됩니다."}
             </p>
           </section>
 
@@ -485,7 +471,7 @@ const BasicInterviewPage = ({
             <BigStepBlock
               index={2}
               currentBigStep={currentBigStep}
-              title="기타 인터뷰"
+              title="마지막 질문"
               subtitle={
                 currentBigStep === 2
                   ? "현재 진행"
@@ -643,7 +629,9 @@ const BasicInterviewPage = ({
                   : "마이크로 답변하거나 오디오 파일을 업로드하면 여기에 텍스트로 표시됩니다.")
               }
               onButtonClick={
-                isLastQuestion ? handleFinishInterview : () => moveToNextStepWithLoading()
+                isLastQuestion
+                  ? handleFinishInterview
+                  : () => moveToNextStepWithLoading()
               }
             />
           </section>

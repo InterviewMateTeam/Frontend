@@ -66,7 +66,7 @@ function App() {
     try {
       const session = await createInterviewSession({
         mode: "MOCK",
-        totalQuestionCount: 7,
+        totalQuestionCount: 4,
       });
 
       console.log("면접 세션 시작:", session);
