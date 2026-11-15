@@ -6,7 +6,6 @@
 
 사용자가 선택한 면접 유형과 입력한 정보를 바탕으로 질문을 생성하고, 음성으로 답변한 내용을 분석하여 면접 결과를 제공합니다.
 
-**🔗 [서비스 바로가기](https://interviewmate-site.vercel.app/)**
 
 ---
 
@@ -197,11 +196,5 @@ pnpm lint
 
 ---
 
-## 🔗 Links
-
-- **Service:** https://interviewmate-site.vercel.app/
-- **Frontend Repository:** https://github.com/InterviewMateTeam/Frontend
-
----
 
 *InterviewMate는 AI 질문 생성, 음성 기반 답변, 면접 피드백을 하나의 사용자 흐름으로 연결하는 데 중점을 둔 프로젝트입니다.*
