@@ -164,37 +164,5 @@ STT 변환 및 답변 제출
 
 ---
 
-## 🚀 Getting Started
-
-### 1. Repository Clone
-
-```bash
-git clone https://github.com/InterviewMateTeam/Frontend.git
-cd Frontend
-```
-
-### 2. Install Dependencies
-
-```bash
-pnpm install
-```
-
-### 3. Run Development Server
-
-```bash
-pnpm dev
-```
-
-### 4. Build & Lint
-
-```bash
-pnpm build
-pnpm lint
-```
-
-일부 기능은 백엔드 API 연동이 필요하므로, 로컬 환경에서 실행할 때는 API 서버 연결 설정을 확인해야 합니다.
-
----
-
 
 *InterviewMate는 AI 질문 생성, 음성 기반 답변, 면접 피드백을 하나의 사용자 흐름으로 연결하는 데 중점을 둔 프로젝트입니다.*
